@@ -1,5 +1,7 @@
 # Frostline
 
+![Nori Works Three.js scene showing six sushi production zones and their temperatures](docs/images/nori-works-scene.png)
+
 **Sushi production, seen through temperature.**
 
 Frostline follows a shift at **Nori Works**, a fictional sushi manufacturing facility in Zagreb. Built with **Tiger Data / TimescaleDB, Three.js and React**, it brings refrigerated fish storage, ingredient preparation, maki and nigiri assembly, and chilled packing into one interactive production floor. A packing-chiller interruption and a longer excursion on the maki line show how current temperature and accumulated _thermal debt_ tell different parts of the shift story.
