@@ -36,6 +36,14 @@ void test('a recovered zone keeps historical exposure', () => {
   assert.equal(result.temperature, 3);
   assert.equal(result.debt, 20);
 });
+void test('unexpected extra sensors are unknown, matching the SQL completeness check', () => {
+  const result = summarize([point(7), point(9, 5)], 1);
+  assert.equal(result.temperature, null);
+  assert.equal(result.debt, 10);
+  assert.equal(result.peak, 7);
+  assert.equal(result.unknownMinutes, 5);
+  assert.equal(result.observedMinutes, 5);
+});
 void test('fixture is deterministic, complete in time, and has a deliberate gap', () => {
   const fixture = makeFixture();
   assert.deepEqual(fixture, makeFixture());

@@ -150,7 +150,7 @@ export function summarize(points: Point[], index: number) {
   const upto = Math.max(-1, Math.min(Math.trunc(index), points.length - 1));
   for (let i = 0; i <= upto; i++) {
     const point = points[i];
-    if (point.temperature === null || point.sensors < 4) continue;
+    if (point.temperature === null || point.sensors !== 4) continue;
     observedMinutes += INTERVAL;
     peak =
       peak === null ? point.temperature : Math.max(peak, point.temperature);

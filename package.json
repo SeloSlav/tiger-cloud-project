@@ -2,12 +2,14 @@
   "name": "frostline",
   "version": "0.1.0",
   "private": true,
+  "license": "MIT",
   "engines": {
     "node": ">=22.13.0"
   },
   "scripts": {
     "dev": "vinext dev",
     "build": "vinext build",
+    "build:pages": "node scripts/build-pages.mjs",
     "start": "wrangler dev --config dist/server/wrangler.json",
     "lint": "oxlint",
     "format": "oxfmt",
@@ -17,6 +19,7 @@
     "data:sync": "tsx scripts/export.ts",
     "data:fixture": "tsx scripts/export.ts --fixture",
     "mcp:check": "tsx scripts/check-mcp.ts",
+    "db:verify:mcp": "tsx scripts/verify-mcp.ts",
     "db:seed:mcp": "tsx scripts/seed-mcp.ts",
     "data:sync:mcp": "tsx scripts/export-mcp.ts"
   },

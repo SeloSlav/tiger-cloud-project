@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import assert from 'node:assert/strict';
 import { connect } from './database';
+import { assertQuality } from './quality';
 import {
   makeFixture,
   ZONES,
@@ -20,6 +21,11 @@ else {
       'BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY',
     );
     const end = new Date(Date.parse(START) + 86400000).toISOString();
+    const quality = await client.query(
+      await readFile(new URL('../db/quality.sql', import.meta.url), 'utf8'),
+      [START, end],
+    );
+    assertQuality(quality.rows[0].quality);
     const { rows } = await client.query(
       await readFile(new URL('../db/replay.sql', import.meta.url), 'utf8'),
       [START, end],

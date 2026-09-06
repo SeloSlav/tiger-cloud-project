@@ -13,7 +13,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  icons: { icon: '/favicon.svg' },
+  icons: {
+    icon: `${process.env.FROSTLINE_TARGET === 'pages' ? '/tiger-cloud-project' : ''}/favicon.svg`,
+  },
   title: 'Frostline — Nori Works, Zagreb',
   description:
     'Inside Nori Works: a 3D sushi production facility in Zagreb. Replay a shift, trace temperature excursions and compare thermal debt with Tiger Data.',

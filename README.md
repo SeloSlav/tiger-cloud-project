@@ -2,6 +2,8 @@
 
 ![Nori Works Three.js scene showing six sushi production zones and their temperatures](docs/images/nori-works-scene.jpg)
 
+[**Open the interactive demo**](https://seloslav.github.io/tiger-cloud-project/) · [Database support walkthrough](docs/support-runbook.md) · [Build checks](https://github.com/SeloSlav/tiger-cloud-project/actions)
+
 **Sushi production, seen through temperature.**
 
 Frostline follows a shift at **Nori Works**, a fictional sushi manufacturing facility in Zagreb. Built with **Tiger Data / TimescaleDB, Three.js and React**, it brings refrigerated fish storage, ingredient preparation, maki and nigiri assembly, and chilled packing into one interactive production floor. A packing-chiller interruption and a longer excursion on the maki line show how current temperature and accumulated _thermal debt_ tell different parts of the shift story.
@@ -50,7 +52,7 @@ For each **completed, fully observed five-minute bucket**:
 thermal debt = Σ max(zone mean temperature − 5 °C, 0) × 5 minutes
 ```
 
-Ten minutes at 7 °C adds **20 °C·min**. Cooling does not erase that history. Only buckets up to the selected replay time count. Buckets with fewer than four sensor readings remain unknown; the demo does not interpolate or carry readings across gaps. The right panel reports unobserved time.
+Ten minutes at 7 °C adds **20 °C·min**. Cooling does not erase that history. Only buckets up to the selected replay time count. Buckets without exactly four expected sensor readings remain unknown; the demo does not interpolate or carry readings across gaps. The right panel reports unobserved time.
 
 The replay uses a 2–5 °C target for its six chilled stages. Thermal debt is an area-under-the-curve calculation over zone averages; the database also retains peak sensor temperatures in the rollup.
 
@@ -70,6 +72,7 @@ flowchart LR
 - **Continuous aggregate:** `frostline.zone_5m` materializes mean temperatures and sensor counts. The refresh policy has a five-minute lag, and the exporter uses an explicit historical window. `materialized_only=true` makes the snapshot boundary unambiguous.
 - **Hypercore:** a columnstore policy moves chunks older than seven days, segmented by zone and sensor. This demonstrates the storage lifecycle; the tiny demo is not a compression benchmark.
 - **Missingness:** a timestamp grid crossed with zones and left-joined to the rollup keeps missing buckets visible.
+- **Data quality:** before publishing, both exporters check the bounded raw readings for repeated sensor samples and unexpected identities. A bucket's four rows must come from the four known sensors. Invalid input aborts the export; missing readings remain visible gaps.
 - **Verification:** export uses a repeatable-read transaction and checks all six SQL thermal-debt totals against the TypeScript implementation before writing the snapshot.
 - **Credentials:** direct PostgreSQL scripts require TLS certificate verification; MCP scripts use Tiger CLI's connection defaults. The website only receives synthetic aggregate data. Tiger CLI keeps account credentials and service passwords in the OS credential store; optional `.env.database` stays ignored.
 - **Tiger MCP:** the alternate seed/export path calls Tiger's real `db_execute_query` tool over stdio. Its JSON export is assembled in one SQL statement, checked for truncation, and verified against the client calculation.
@@ -117,6 +120,14 @@ npm run data:fixture
 
 The UI labels a local fixture differently from a snapshot exported from Tiger.
 
+### Verify and troubleshoot the database
+
+```sh
+npm run db:verify:mcp
+```
+
+This runs read-only checks against the actual Tiger service: raw-to-rollup parity, sensor identity and duplicate checks, a SQL regression using CTE fixtures, job status, chunk storage state, and a bounded `EXPLAIN (ANALYZE, BUFFERS)`. It does not seed or modify tables. See the [support walkthrough](docs/support-runbook.md) for the measured result and how to investigate connection, refresh and query-plan issues.
+
 ### Useful MCP prompts
 
 - “Show me the schema and indexes for the frostline.readings hypertable.”
@@ -145,6 +156,9 @@ This initializes the actual stdio MCP server and verifies that `db_execute_query
 | `db/001_schema.sql`                | Hypertable, continuous aggregate and Hypercore policy          |
 | `db/replay.sql`                    | Bounded time grid with missing-bucket preservation             |
 | `db/thermal-debt.sql`              | Independent SQL exposure calculation                           |
+| `db/quality.sql`                   | Reject repeated sensor samples and unexpected identities       |
+| `db/diagnostics.sql`               | Compare raw data and rollups; inspect jobs and chunks          |
+| `scripts/verify-mcp.ts`            | Read-only Tiger diagnostics, SQL regression and query plan     |
 | `scripts/seed.ts`                  | Idempotent synthetic ingestion and historical refresh          |
 | `scripts/export.ts`                | SQL export and parity verification                             |
 | `data/telemetry.json`              | Portable, nonsecret replay dataset                             |
@@ -165,10 +179,22 @@ Scene checks cover camera framing across aspect ratios, delivery continuity, pic
 
 The frontend uses the Sites Vinext/React starter and can deploy as a Cloudflare Worker. `.openai/hosting.json` is this demo's Sites project binding; create your own Site and replace its project ID when deploying a fork. No database credentials are needed by the deployment.
 
+### GitHub Pages
+
+The [public demo](https://seloslav.github.io/tiger-cloud-project/) uses the same app and checked-in Tiger snapshot, exported to static HTML with hydrated React and Three.js:
+
+```sh
+npm run build:pages
+```
+
+The build checks local asset references and packages `out/` for the `/tiger-cloud-project/` URL prefix. `.github/workflows/pages.yml` tests and deploys every push to `main` through GitHub Actions. No Tiger password or database service is required by Pages. The replay is a historical archive; the animated workers are procedural scene activity.
+
+For a fork with a different repository name, update the prefix in `next.config.ts`, `app/layout.tsx` and `scripts/package-pages.mjs`, then enable **Settings → Pages → GitHub Actions**. The default `npm run build` continues to target the Worker. A build-only Windows preload yields before Vinext exits to avoid [Node's fetch teardown issue](https://github.com/nodejs/node/issues/56645); it preserves the exit status and is not shipped to browsers.
+
 Optional browser WebMCP exposes `inspect_frostline` and `set_frostline_replay` when `document.modelContext` is supported. These operate on the same visible page state and do not execute database writes. Browsers without the proposal are unaffected.
 
 ## Scope and validation limits
 
-This is a focused portfolio experiment: a fixed snapshot, one facility, six zones and one incident. The sensor-count check is appropriate to the seeded one-reading-per-sensor-per-bucket dataset; real ingestion must count distinct sensor identities and reject duplicates. Historical refreshes and raw-data retention must be coordinated before adding retention jobs. No claim is made about production-scale query performance, GPU benchmarks, or browser/device QA.
+This is a focused portfolio experiment: a fixed snapshot, one facility, six zones and one incident. The exporter enforces the seeded one-reading-per-known-sensor-per-bucket contract. A real ingestion pipeline would need an equipment registry, changing sensor membership, event-time deduplication and an explicit policy for irregular sampling and late arrivals. Historical refreshes and raw-data retention must be coordinated before adding retention jobs. The support walkthrough includes one small query-plan measurement; it is not evidence of production-scale performance. No GPU benchmark or broad browser/device QA is claimed.
 
-Built by [SeloSlav](https://github.com/SeloSlav). Independent demo; not affiliated with Tiger Data.
+Built by [SeloSlav](https://github.com/SeloSlav). [MIT licensed](LICENSE). Independent demo; not affiliated with Tiger Data.
