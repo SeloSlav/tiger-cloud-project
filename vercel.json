@@ -1,0 +1,8 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "buildCommand": "node scripts/build-api.mjs",
+  "outputDirectory": "api-public",
+  "regions": ["iad1"],
+  "functions": { "api/monitor.ts": { "maxDuration": 15 } }
+}

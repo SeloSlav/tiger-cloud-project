@@ -2,13 +2,13 @@
 
 ![Nori Works Three.js scene showing six sushi production zones and their temperatures](docs/images/nori-works-scene.jpg)
 
-[**Open the interactive demo**](https://seloslav.github.io/tiger-cloud-project/) · [Database support walkthrough](docs/support-runbook.md) · [Build checks](https://github.com/SeloSlav/tiger-cloud-project/actions)
+[**Open Frostline**](https://seloslav.github.io/tiger-cloud-project/) · [Live monitoring architecture](docs/live-monitoring.md) · [Database support walkthrough](docs/support-runbook.md) · [Build checks](https://github.com/SeloSlav/tiger-cloud-project/actions)
 
-**Sushi production, seen through temperature.**
+**Temperature monitoring for sushi production.**
 
-Frostline follows a shift at **Nori Works**, a fictional sushi manufacturing facility in Zagreb. Built with **Tiger Data / TimescaleDB, Three.js and React**, it brings refrigerated fish storage, ingredient preparation, maki and nigiri assembly, and chilled packing into one interactive production floor. A packing-chiller interruption and a longer excursion on the maki line show how current temperature and accumulated _thermal debt_ tell different parts of the shift story.
+Frostline monitors **Nori Works**, a fictional sushi manufacturing facility in Zagreb. Built with **Tiger Data / TimescaleDB, Three.js and React**, it brings refrigerated fish storage, ingredient preparation, maki and nigiri assembly, and chilled packing into one production floor. Operators can check current temperatures, inspect sustained warming incidents and compare the last 24 hours of exposure.
 
-The facility and sensor readings are synthetic. The database schema, hypertable, continuous aggregate, SQL export and MCP integration are real. The checked-in Tiger snapshot makes the app work without a Tiger account or browser-visible credentials.
+The sensor inputs are simulated; the monitoring runs continuously. A Timescale background job writes a new observation from each sensor every minute and persists incident state. A read-only API on Vercel queries Tiger while the dashboard refreshes every 30 seconds. Collection continues when the page and the developer's computer are closed. The original recorded shift remains available under **Shift archive**.
 
 | Zone | Production stage | Equipment and product                            |
 | ---- | ---------------- | ------------------------------------------------ |
@@ -30,6 +30,12 @@ npm run dev
 
 Open the local URL printed by the server (normally http://localhost:3000).
 
+1. Open **Live monitoring**, select a zone and inspect its current temperature. The feed shows the latest sensor timestamp, independently of the page request time.
+2. Select an **Open** or **Recovered** incident to focus its production area. Check its start, peak temperature and recovery time.
+3. Inspect the rolling history. Missing or partial readings appear as gaps; a stalled feed becomes visibly delayed.
+
+For the original guided incident replay, choose **Shift archive**:
+
 1. Select **B2 / Maki assembly** and inspect its temperature and thermal debt.
 2. Click **Packing chiller pauses** and play the incident. Packing warms first; the maki line follows.
 3. Click **Shift totals**. Every zone cools down, with the exposure recorded in the thermal debt view.
@@ -38,7 +44,9 @@ Open the local URL printed by the server (normally http://localhost:3000).
 
 Selecting equipment or a zone button smoothly brings that area into close view. The other floating labels and floor outlines disappear; **Whole factory** restores the overview. Orbit and zoom remain available in either view.
 
-Six articulated workers handle persistent trays and individual ingredients. Fish moves from refrigerated shelves to preparation, then to maki or nigiri assembly. Vegetable prep supplies the maki station; assembly waits for its ingredients. Workers carry finished trays to packing, fit physical lids at the sealer, and place the sealed batches into the chiller. All worktops are stationary. Finished stock stays in the chiller until **Restart production sequence** is selected; there is no automatic inventory reset. The activity button pauses the factory animation independently of the temperature replay. Reduced-motion preferences start the factory paused and make camera transitions immediate. Animation runs at a capped render rate and suspends while the scene is offscreen or the tab is hidden.
+Fourteen articulated workers handle twelve reusable trays across overlapping batches. Receiving, fish preparation, maki and nigiri assembly, vegetable supply, packing, chilling and dispatch run concurrently. Directional walking lanes and staggered crew schedules keep the aisles moving without a factory-wide lock. Workers pick up real trays, carry them with their gloves on the handles, place them on stationary benches and return for the next batch. Ingredients and lids are separate objects placed during assembly and packing; finished stock leaves through dispatch before its pooled tray is reused off the production floor.
+
+The factory is a continuous demonstration that opens with work already in progress. Its brisk 1.65× clock is independent of Live/Archive selection, temperature updates and incident replay. The activity button pauses only the demonstration; **Restart production sequence** returns to the same busy opening. Reduced-motion preferences start it paused. Animation runs at a capped render rate and suspends while the scene is offscreen or the tab is hidden.
 
 Each zone has a keyboard-accessible selection button. If WebGL is unavailable, the chart, replay, zone controls and metrics remain usable.
 
@@ -52,7 +60,7 @@ For each **completed, fully observed five-minute bucket**:
 thermal debt = Σ max(zone mean temperature − 5 °C, 0) × 5 minutes
 ```
 
-Ten minutes at 7 °C adds **20 °C·min**. Cooling does not erase that history. Only buckets up to the selected replay time count. Buckets without exactly four expected sensor readings remain unknown; the demo does not interpolate or carry readings across gaps. The right panel reports unobserved time.
+Ten minutes at 7 °C adds **20 °C·min**. Cooling does not erase that history. Live monitoring integrates the last 24 hours; the archive counts only buckets up to the selected replay time. Live buckets require all **20 samples from four registered sensors** (one per minute). The older archive has four samples per bucket. Incomplete buckets remain unknown; neither path interpolates across gaps. The right panel reports unobserved time.
 
 The replay uses a 2–5 °C target for its six chilled stages. Thermal debt is an area-under-the-curve calculation over zone averages; the database also retains peak sensor temperatures in the rollup.
 
@@ -60,13 +68,20 @@ The replay uses a 2–5 °C target for its six chilled stages. Thermal debt is a
 
 ```mermaid
 flowchart LR
-    S[24 synthetic sensors] --> H[TimescaleDB hypertable]
+    S[One-minute sensor job] --> H[Live readings hypertable]
     H --> A[Five-minute continuous aggregate]
-    A --> Q[Bounded replay + thermal-debt SQL]
-    Q --> J[Verified JSON snapshot]
-    J --> V[Three.js sushi facility + shift replay]
-    M[Tiger MCP in Codex] --> H
+    H --> I[Persisted temperature incidents]
+    A --> Q[Restricted monitoring SQL function]
+    I --> Q
+    Q --> API[Read-only Vercel API]
+    API --> V[Three.js production dashboard]
+    M[Tiger MCP] --> H
+    H --> C[Columnstore after one day]
 ```
+
+The running workflow uses the separate `frostline_live` schema: a sensor registry, timestamp-aligned observations, a real-time continuous aggregate, incident persistence, custom background job, Hypercore columnstore and coordinated retention policies. The API's database role can execute one bounded function and cannot select or insert raw table rows. [Setup, tests, measured storage savings and stopping the collector](docs/live-monitoring.md).
+
+The original `frostline` schema powers the fixed shift archive:
 
 - **Hypertable:** `frostline.readings`, partitioned daily, with a `(zone_id, time DESC)` index. The primary key includes time, so seed retries are idempotent.
 - **Continuous aggregate:** `frostline.zone_5m` materializes mean temperatures and sensor counts. The refresh policy has a five-minute lag, and the exporter uses an explicit historical window. `materialized_only=true` makes the snapshot boundary unambiguous.
@@ -77,7 +92,7 @@ flowchart LR
 - **Credentials:** direct PostgreSQL scripts require TLS certificate verification; MCP scripts use Tiger CLI's connection defaults. The website only receives synthetic aggregate data. Tiger CLI keeps account credentials and service passwords in the OS credential store; optional `.env.database` stays ignored.
 - **Tiger MCP:** the alternate seed/export path calls Tiger's real `db_execute_query` tool over stdio. Its JSON export is assembled in one SQL statement, checked for truncation, and verified against the client calculation.
 
-The snapshot is intentional: this project explores a historical incident, without adding an always-on ingestion service, API or secret-management burden. Run `npm run data:sync` and rebuild to publish a fresh snapshot. It is not live polling.
+The archive remains a portable snapshot: run `npm run data:sync` and rebuild to replace it. Live monitoring queries the separate API and does not need a website deployment to show new readings.
 
 ### Connect your own Tiger database
 
@@ -109,6 +124,8 @@ npm run data:sync:mcp
 ```
 
 These use Tiger CLI's saved password and connection defaults. On newly provisioned services, Tiger may initially present a bootstrap certificate before installing its publicly signed certificate. The direct PostgreSQL scripts deliberately require certificate verification and may need to wait for that provisioning step; the MCP path uses Tiger's standard encrypted connection. See [Tiger's SSL documentation](https://docs.timescale.com/use-timescale/latest/security/strict-ssl/).
+
+Tiger's **free services do not receive publicly signed SSL certificates**. For the live API on this free DEV service, `FROSTLINE_TLS_MODE=require` explicitly selects an encrypted connection without CA verification, matching the CLI's default. Other deployments default to `verify-full`. The API never silently weakens TLS after a connection error. See [live deployment details](docs/live-monitoring.md).
 
 The seed creates the `frostline` schema and project resources. Repeated runs update zone names and product descriptions while preserving existing readings. It inserts **6,892** synthetic readings for 4 September 2026, with a 25-minute outage in C1, then refreshes the historical aggregate explicitly. The raw readings average into 1,728 time/zone slots, including five empty slots. Data is fixed and reproducible.
 
@@ -175,7 +192,7 @@ npm start
 
 Tests cover exposure magnitude/duration, exact thresholds, missing/partial buckets, recovered temperatures, replay cutoffs and deterministic incidents. `npm start` runs the built Worker locally through Wrangler.
 
-Scene checks cover camera framing, production dependencies, exclusive object ownership, continuous handoffs, equipment clearance, persistent ingredient identities, final chilled inventory and the geometry budget. `?scene-debug=1` displays walking routes; add `&scene-time=90` to inspect a reproducible paused moment. Motion is deterministic in elapsed seconds and independent of temperature replay. There is no post-processing pass; the regular rendering is also the no-post baseline.
+Scene checks cover camera framing, batch dependencies, exclusive tray ownership, continuous handoffs and loop boundaries, worker and equipment clearance, glove contact, activity density and the pooled geometry budget. The floor averages more than five visible walkers and at least 2.5 loaded trays in transit. `?scene-debug=1` displays walking routes; add `&scene-time=90` to inspect a reproducible paused moment. Motion is deterministic in elapsed seconds and independent of temperature replay. There is no post-processing pass; the regular rendering is also the no-post baseline.
 
 The frontend uses the Sites Vinext/React starter and can deploy as a Cloudflare Worker. `.openai/hosting.json` is this demo's Sites project binding; create your own Site and replace its project ID when deploying a fork. No database credentials are needed by the deployment.
 

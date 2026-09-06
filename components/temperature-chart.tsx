@@ -22,7 +22,7 @@ export function TemperatureChart({
   const paths: string[] = [];
   let path = '';
   points.forEach((p, i) => {
-    if (i > index || p.temperature === null || p.sensors < 4) {
+    if (i > index || p.temperature === null || p.sensors !== 4) {
       if (path) paths.push(path);
       path = '';
       return;
@@ -82,7 +82,9 @@ export function TemperatureChart({
           y={height - 5}
           textAnchor={hour === 0 ? 'start' : hour === 24 ? 'end' : 'middle'}
         >
-          {String(hour).padStart(2, '0')}:00
+          {hour === 24
+            ? timeLabel(points[points.length - 1].time, true)
+            : timeLabel(points[Math.floor((hour / 24) * points.length)].time)}
         </text>
       ))}
       {paths.map((d, i) => (

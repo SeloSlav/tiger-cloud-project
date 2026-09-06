@@ -38,8 +38,11 @@ import {
   type ZoneId,
 } from '@/lib/telemetry';
 import rawData from '@/data/telemetry.json';
+import { useLiveMonitor } from '@/components/use-live-monitor';
+import { emptyLiveHistory, monitorIsStale } from '@/lib/live-monitor';
 const Warehouse = lazy(() => import('@/components/warehouse'));
-const data = rawData as Snapshot;
+const archive = rawData as Snapshot;
+const emptyHistory = emptyLiveHistory();
 const INITIAL_INDEX = 222;
 
 type ModelTool = {
@@ -59,19 +62,45 @@ type ModelDocument = Document & {
 };
 
 export default function Home() {
+  const [mode, setMode] = useState<'live' | 'archive'>('live');
+  const isLive = mode === 'live';
+  const { monitor: live, error: liveError, now } = useLiveMonitor(isLive);
+  const stale = monitorIsStale(live, now);
+  const data = isLive ? (live?.history ?? emptyHistory) : archive;
   const [metric, setMetric] = useState<Metric>('temperature');
   const [selected, setSelected] = useState<ZoneId>('B2');
   const [focusedZone, setFocusedZone] = useState<ZoneId | null>(null);
   const [focusRevision, setFocusRevision] = useState(0);
-  const [index, setIndex] = useState(INITIAL_INDEX);
+  const [replayIndex, setIndex] = useState(INITIAL_INDEX);
+  const index = isLive ? 287 : replayIndex;
   const [playing, setPlaying] = useState(false);
-  const latest = useRef({ index, selected, metric, focusedZone });
+  const latest = useRef({
+    index,
+    selected,
+    metric,
+    focusedZone,
+    mode,
+    data,
+    live,
+  });
   useEffect(() => {
-    latest.current = { index, selected, metric, focusedZone };
-  }, [index, selected, metric, focusedZone]);
+    latest.current = { index, selected, metric, focusedZone, mode, data, live };
+  }, [index, selected, metric, focusedZone, mode, data, live]);
   const summaries = useMemo(
-    () => ZONES.map((z) => ({ ...z, ...summarize(data.zones[z.id], index) })),
-    [index],
+    () =>
+      ZONES.map((z) => ({
+        ...z,
+        ...summarize(data.zones[z.id], index),
+        ...(isLive
+          ? {
+              temperature: stale
+                ? null
+                : (live?.current[z.id].temperature ?? null),
+              sensors: stale ? 0 : (live?.current[z.id].sensors ?? 0),
+            }
+          : {}),
+      })),
+    [data, index, isLive, live, stale],
   );
   const current = summaries.find((z) => z.id === selected)!;
   const valid = summaries.filter((z) => z.temperature !== null);
@@ -84,6 +113,18 @@ export default function Home() {
   const totalDebt = summaries.reduce((sum, z) => sum + z.debt, 0);
   const time = timeLabel(data.zones.A1[index].time, true);
   const atEnd = index === 287;
+  const readingTime = live?.latestReadingAt
+    ? timeLabel(live.latestReadingAt)
+    : '—';
+  const liveStatus = liveError
+    ? 'Updates interrupted'
+    : !live
+      ? 'Connecting to the sensor feed…'
+      : stale
+        ? 'Sensor feed delayed'
+        : live.collector?.scheduled === false
+          ? 'Sensor feed paused'
+          : 'Receiving sensor readings';
   const selectTime = (next: number) => {
     setPlaying(false);
     setIndex(next);
@@ -94,13 +135,13 @@ export default function Home() {
     setFocusRevision((value) => value + 1);
   };
   useEffect(() => {
-    if (!playing) return;
+    if (!playing || isLive) return;
     const timer = window.setTimeout(() => {
       if (index >= 286) setPlaying(false);
       setIndex(Math.min(index + 1, 287));
     }, 130);
     return () => window.clearTimeout(timer);
-  }, [playing, index]);
+  }, [playing, index, isLive]);
   useEffect(() => {
     const context = (document as ModelDocument).modelContext;
     if (!context?.registerTool) return;
@@ -109,7 +150,7 @@ export default function Home() {
       {
         name: 'inspect_frostline',
         description:
-          'Read the visible replay position, selected zone and thermal exposure. Data is synthetic historical telemetry, not live monitoring.',
+          'Read the visible mode, selected zone, temperature and thermal exposure. Live mode queries Tiger; all sensor inputs are simulated.',
         inputSchema: {
           type: 'object',
           properties: {},
@@ -119,9 +160,15 @@ export default function Home() {
         execute() {
           const state = latest.current;
           return {
-            ...state,
-            ...summarize(data.zones[state.selected], state.index),
-            source: data.source,
+            mode: state.mode,
+            index: state.index,
+            selected: state.selected,
+            metric: state.metric,
+            ...summarize(state.data.zones[state.selected], state.index),
+            ...(state.mode === 'live'
+              ? state.live?.current[state.selected]
+              : {}),
+            source: state.data.source,
           };
         },
       },
@@ -156,6 +203,7 @@ export default function Home() {
           )
             throw new Error('Invalid zone, index or metric.');
           flushSync(() => {
+            setMode('archive');
             setSelected(v.zone as ZoneId);
             setFocusedZone(v.zone as ZoneId);
             setFocusRevision((value) => value + 1);
@@ -164,8 +212,10 @@ export default function Home() {
             setPlaying(false);
           });
           return {
-            ...latest.current,
-            ...summarize(data.zones[v.zone as ZoneId], Number(v.index)),
+            mode: 'archive',
+            index: Number(v.index),
+            selected: v.zone,
+            ...summarize(archive.zones[v.zone as ZoneId], Number(v.index)),
           };
         },
       },
@@ -216,7 +266,7 @@ export default function Home() {
         <div className="topbar-right">
           <span className="demo-pill">
             <span />
-            {data.source === 'tiger' ? 'TIGER DATA SNAPSHOT' : 'SIMULATED DATA'}
+            {isLive ? 'SIMULATED SENSORS' : 'SHIFT ARCHIVE'}
           </span>
           <a
             className="source-link"
@@ -234,22 +284,54 @@ export default function Home() {
           <p className="eyebrow">
             SUSHI PRODUCTION <span>/</span> FACILITY 01
           </p>
-          <h1>Crafted cold.</h1>
+          <h1>Production monitoring.</h1>
           <p className="subtitle">
-            From salmon prep to the final tray. Every zone, one view.
+            Current conditions, temperature incidents and a history of every
+            zone.
           </p>
         </div>
         <div className="facility">
           <span className="status-dot" />
           Nori Works · Zagreb
           <small>
-            04 SEP 2026 <span>REPLAY / UTC</span>
+            {isLive
+              ? live
+                ? new Date(live.queriedAt).toISOString().slice(0, 10)
+                : 'NORI WORKS'
+              : '04 SEP 2026'}
+            <span>{isLive ? 'MONITORING / UTC' : 'REPLAY / UTC'}</span>
           </small>
         </div>
       </section>
+      <div className="monitor-toolbar">
+        <Tabs
+          value={mode}
+          onValueChange={(v) => {
+            setMode(v as 'live' | 'archive');
+            setPlaying(false);
+          }}
+        >
+          <TabsList className="metric-tabs" aria-label="Monitoring mode">
+            <TabsTrigger value="live">Live monitoring</TabsTrigger>
+            <TabsTrigger value="archive">Shift archive</TabsTrigger>
+          </TabsList>
+        </Tabs>
+        <p
+          className={`feed-status ${isLive && (stale || liveError) ? 'delayed' : ''}`}
+          role="status"
+        >
+          <Radio size={15} />
+          {isLive ? liveStatus : '4 September 2026 · recorded shift'}
+          {isLive && live && <span>Last reading {readingTime} UTC</span>}
+        </p>
+      </div>
       <section
         className="metrics"
-        aria-label="Facility summary at replay position"
+        aria-label={
+          isLive
+            ? 'Current facility conditions'
+            : 'Facility summary at replay position'
+        }
       >
         {[
           {
@@ -273,14 +355,18 @@ export default function Home() {
             label: 'Thermal debt',
             value: Math.round(totalDebt).toLocaleString('en-US'),
             unit: '°C·min',
-            note: 'Observed exposure across all zones',
+            note: isLive
+              ? 'Observed exposure · rolling 24 hours'
+              : 'Observed exposure across all zones',
           },
           {
             icon: Radio,
             label: 'Sensor coverage',
             value: String(summaries.reduce((n, z) => n + z.sensors, 0)),
             unit: '/ 24',
-            note: `Completed 5-minute bucket · ${time} UTC`,
+            note: isLive
+              ? `One-minute sensor readings · ${readingTime} UTC`
+              : `Completed 5-minute bucket · ${time} UTC`,
           },
         ].map((m) => (
           <article className="metric" key={m.label}>
@@ -393,7 +479,9 @@ export default function Home() {
             className={`alert-label ${current.temperature !== null && current.temperature <= 5 ? 'healthy' : ''}`}
           >
             {current.temperature === null
-              ? 'Telemetry unavailable in this bucket'
+              ? isLive
+                ? 'Waiting for a complete, recent sensor reading'
+                : 'Telemetry unavailable in this bucket'
               : current.temperature > 5
                 ? '↑ Above the 5 °C upper limit'
                 : current.temperature < 2
@@ -440,8 +528,8 @@ export default function Home() {
             {current.temperature === null
               ? `${current.name} has ${current.sensors} of 4 sensors reporting in this interval.`
               : current.debt > 0
-                ? `${current.name} has recorded ${current.aboveMinutes} minutes above 5 °C this shift, with a peak of ${current.peak?.toFixed(1)} °C.`
-                : `${current.name} has recorded ${current.observedMinutes} minutes at or below 5 °C this shift.`}
+                ? `${current.name} has recorded ${current.aboveMinutes} minutes above 5 °C ${isLive ? 'in the last 24 hours' : 'this shift'}, with a peak bucket mean of ${current.peak?.toFixed(1)} °C.`
+                : `${current.name} has recorded ${current.observedMinutes} minutes at or below 5 °C ${isLive ? 'in the last 24 hours' : 'this shift'}.`}
           </p>
           <div className="insight-note">
             <Clock3 size={19} />
@@ -449,20 +537,78 @@ export default function Home() {
               {current.sensors} / 4 sensors reporting
               <br />
               <span>
-                Interval ending {time} UTC · {current.cargo}
+                {isLive
+                  ? `Last reading ${readingTime}`
+                  : `Interval ending ${time}`}{' '}
+                UTC · {current.cargo}
               </span>
             </p>
           </div>
         </aside>
       </div>
+      {isLive && (
+        <section className="incident-panel" aria-label="Temperature incidents">
+          <div className="replay-heading">
+            <div>
+              <p className="eyebrow">TEMPERATURE INCIDENTS</p>
+              <h2>Open issues and recent recoveries.</h2>
+            </div>
+            <span className="incident-count">
+              {live?.incidents.filter((i) => !i.resolvedAt).length ?? '—'} open
+            </span>
+          </div>
+          {!live ? (
+            <p className="incident-empty">
+              {liveError
+                ? 'Incident history is temporarily unavailable.'
+                : 'Loading incident history…'}
+            </p>
+          ) : live.incidents.length === 0 ? (
+            <p className="incident-empty">
+              No temperature incidents recorded in the last 24 hours.
+            </p>
+          ) : (
+            <div className="incident-list">
+              {live.incidents.map((incident) => (
+                <button
+                  key={incident.id}
+                  className="incident-row"
+                  onClick={() => selectZone(incident.zoneId)}
+                >
+                  <span
+                    className={`incident-state ${incident.resolvedAt ? 'resolved' : ''}`}
+                  >
+                    {incident.resolvedAt ? 'Recovered' : 'Open'}
+                  </span>
+                  <strong>
+                    {ZONES.find((z) => z.id === incident.zoneId)?.name}
+                  </strong>
+                  <span>Started {timeLabel(incident.startedAt)} UTC</span>
+                  <span>Peak {incident.peakTemperature.toFixed(1)} °C</span>
+                  <span>
+                    {incident.resolvedAt
+                      ? `Recovered ${timeLabel(incident.resolvedAt)} UTC`
+                      : 'Above limit for 3 consecutive readings'}
+                  </span>
+                  <ArrowUpRight size={16} />
+                </button>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
       <section
         className="replay-panel"
         aria-label="Temperature history and incident replay"
       >
         <div className="replay-heading">
           <div>
-            <p className="eyebrow">SHIFT ARCHIVE / 04 SEP 2026</p>
-            <h2>A day on the line.</h2>
+            <p className="eyebrow">
+              {isLive
+                ? 'TEMPERATURE HISTORY / ROLLING 24 HOURS'
+                : 'SHIFT ARCHIVE / 04 SEP 2026'}
+            </p>
+            <h2>{isLive ? 'The last 24 hours.' : 'A day on the line.'}</h2>
             <p className="replay-description">
               {current.name} · zone {selected} · mean temperature per 5-minute
               bucket
@@ -483,78 +629,87 @@ export default function Home() {
           index={index}
           zone={current.name}
         />
-        <div className="playback-row">
-          <button
-            className="play-button"
-            onClick={() => {
-              if (atEnd) setIndex(0);
-              setPlaying((v) => !v);
-            }}
-            aria-label={playing ? 'Pause replay' : 'Play replay'}
-          >
-            {playing ? (
-              <Pause size={16} fill="currentColor" />
-            ) : (
-              <Play size={16} fill="currentColor" />
-            )}
-          </button>
-          <button
-            className="reset-button"
-            aria-label="Replay from start"
-            onClick={() => selectTime(0)}
-          >
-            <SkipBack size={16} />
-          </button>
-          <div className="timeline">
-            <Slider
-              value={[index]}
-              min={0}
-              max={287}
-              step={1}
-              aria-label="Replay time"
-              onValueChange={(v) => selectTime(Array.isArray(v) ? v[0] : v)}
-              aria-valuetext={`${time} UTC`}
-            />
-          </div>
-          <span className="playback-speed">5 MIN / STEP</span>
-          <button
-            className="end-button"
-            onClick={() => {
-              selectTime(287);
-              setMetric('debt');
-            }}
-          >
-            Shift totals <ArrowRight size={15} />
-          </button>
-        </div>
-        <div className="event-list">
-          {EVENTS.map((event, n) => (
+        {!isLive && (
+          <div className="playback-row">
             <button
-              className={`event ${index >= event.index ? 'reached' : ''}`}
-              key={event.index}
+              className="play-button"
               onClick={() => {
-                selectTime(event.index);
-                selectZone(event.zone);
+                if (atEnd) setIndex(0);
+                setPlaying((v) => !v);
+              }}
+              aria-label={playing ? 'Pause replay' : 'Play replay'}
+            >
+              {playing ? (
+                <Pause size={16} fill="currentColor" />
+              ) : (
+                <Play size={16} fill="currentColor" />
+              )}
+            </button>
+            <button
+              className="reset-button"
+              aria-label="Replay from start"
+              onClick={() => selectTime(0)}
+            >
+              <SkipBack size={16} />
+            </button>
+            <div className="timeline">
+              <Slider
+                value={[index]}
+                min={0}
+                max={287}
+                step={1}
+                aria-label="Replay time"
+                onValueChange={(v) => selectTime(Array.isArray(v) ? v[0] : v)}
+                aria-valuetext={`${time} UTC`}
+              />
+            </div>
+            <span className="playback-speed">5 MIN / STEP</span>
+            <button
+              className="end-button"
+              onClick={() => {
+                selectTime(287);
+                setMetric('debt');
               }}
             >
-              <span className="event-number">0{n + 1}</span>
-              <div>
-                <p>
-                  <time>{event.time}</time>
-                  {event.title}
-                </p>
-                <span>{event.detail}</span>
-              </div>
-              <ArrowUpRight size={17} />
+              Shift totals <ArrowRight size={15} />
             </button>
-          ))}
-        </div>
+          </div>
+        )}
+        {!isLive && (
+          <div className="event-list">
+            {EVENTS.map((event, n) => (
+              <button
+                className={`event ${index >= event.index ? 'reached' : ''}`}
+                key={event.index}
+                onClick={() => {
+                  selectTime(event.index);
+                  selectZone(event.zone);
+                }}
+              >
+                <span className="event-number">0{n + 1}</span>
+                <div>
+                  <p>
+                    <time>{event.time}</time>
+                    {event.title}
+                  </p>
+                  <span>{event.detail}</span>
+                </div>
+                <ArrowUpRight size={17} />
+              </button>
+            ))}
+          </div>
+        )}
+        {isLive && (
+          <p className="history-note">
+            Completed five-minute intervals through {time} UTC. Gaps indicate
+            incomplete coverage. Updates every 30 seconds.
+          </p>
+        )}
       </section>
       <footer className="page-footer">
         <span>
           <Snowflake size={14} />
-          FROSTLINE <span> / </span> Synthetic telemetry · real Timescale
-          queries
+          FROSTLINE <span> / </span> Nori Works · production monitoring
         </span>
         <div className="footer-links">
           <Dialog>
@@ -563,10 +718,13 @@ export default function Home() {
               About this data
             </DialogTrigger>
             <DialogContent className="data-dialog">
-              <DialogTitle>Nori Works · shift archive</DialogTitle>
+              <DialogTitle>
+                Nori Works · {isLive ? 'live monitoring' : 'shift archive'}
+              </DialogTitle>
               <DialogDescription>
-                Synthetic production telemetry from a fictional sushi facility
-                in Zagreb, backed by a Tiger Data snapshot.
+                {isLive
+                  ? '24 simulated sensors at a fictional sushi facility in Zagreb. Readings, history and incidents are stored in Tiger Data.'
+                  : 'Synthetic production telemetry from a fictional sushi facility in Zagreb, backed by a Tiger Data snapshot.'}
               </DialogDescription>
               <div className="data-details">
                 <p>
@@ -574,26 +732,31 @@ export default function Home() {
                     {data.rawReadings.toLocaleString('en-US')} synthetic
                     readings
                   </strong>{' '}
-                  from 24 sensors, covering 4 September 2026 in UTC.
+                  from 24 sensors,{' '}
+                  {isLive
+                    ? 'covering the last 24 hours in UTC.'
+                    : 'covering 4 September 2026 in UTC.'}
                 </p>
                 <p>
                   <strong>
                     {data.source === 'tiger' ? data.engine : 'Local fixture'}
                   </strong>
-                  {data.source === 'tiger'
-                    ? ' stored the raw data in a hypertable and materialized the five-minute rollup used by this replay.'
-                    : ' generated this deterministic offline dataset.'}
+                  {isLive
+                    ? ' collects readings every minute and serves this view through a read-only database API. Incidents open after three consecutive readings above 5 °C and recover after two at or below 4.5 °C.'
+                    : data.source === 'tiger'
+                      ? ' stored the raw data in a hypertable and materialized the five-minute rollup used by this replay.'
+                      : ' generated this deterministic offline dataset.'}
                 </p>
                 <p>
                   <strong>
                     Thermal debt = Σ max(mean °C − 5, 0) × 5 minutes.
                   </strong>{' '}
-                  Calculated from completed intervals with four sensor readings.
-                  The archive includes a 25-minute sensor gap in nigiri
-                  assembly.
+                  {isLive
+                    ? 'Calculated from completed intervals with all 20 expected samples. Older raw readings move into columnar storage after one day; raw history is retained for seven days and rollups for thirty.'
+                    : 'Calculated from completed intervals with four sensor readings. The archive includes a 25-minute sensor gap in nigiri assembly.'}
                 </p>
                 <p className="snapshot-stamp">
-                  Snapshot exported{' '}
+                  {isLive ? 'Database queried' : 'Snapshot exported'}{' '}
                   {new Date(data.generatedAt)
                     .toISOString()
                     .replace('T', ' ')
