@@ -1,6 +1,6 @@
 # Frostline
 
-![Nori Works Three.js scene showing six sushi production zones and their temperatures](docs/images/nori-works-scene.jpg)
+[![Wide view of the Nori Works Three.js factory, with workers carrying sushi trays across six monitored production zones](docs/images/nori-works-scene-wide.png)](docs/images/nori-works-scene-wide.png)
 
 [**Open Frostline**](https://seloslav.github.io/tiger-cloud-project/) · [Live monitoring architecture](docs/live-monitoring.md) · [Database support walkthrough](docs/support-runbook.md) · [Build checks](https://github.com/SeloSlav/tiger-cloud-project/actions)
 
