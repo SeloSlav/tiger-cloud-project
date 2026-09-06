@@ -4,6 +4,7 @@ import type { ZoneId } from './telemetry';
 // Metres in a 5.3 × 5.5 m cell. Every assembly shares this small geometry kit.
 // Food shapes are deliberately enlarged for a readable operations schematic.
 export function createFacilityKit() {
+  const beltItems: { group: THREE.Group; startX: number; speed: number }[] = [];
   const geometries = {
     box: new THREE.BoxGeometry(1, 1, 1),
     cylinder: new THREE.CylinderGeometry(0.5, 0.5, 1, 16),
@@ -236,8 +237,13 @@ export function createFacilityKit() {
       }
     } else if (id === 'B2') {
       conveyor(group, 1.2, accent);
-      for (const x of [-1.65, -0.55, 0.55, 1.65])
-        for (const z of [0.92, 1.48]) maki(group, x, 1.38, z);
+      for (const x of [-1.65, -0.55, 0.55, 1.65]) {
+        const rolls = new THREE.Group();
+        rolls.position.x = x;
+        group.add(rolls);
+        for (const z of [0.92, 1.48]) maki(rolls, 0, 1.38, z);
+        beltItems.push({ group: rolls, startX: x, speed: 0.18 });
+      }
       bench(group, -1.45, accent);
       for (const x of [-1.25, 1.25]) {
         box(group, x, 1.32, -1.45, 1.65, 0.07, 0.96, materials.avocado);
@@ -255,11 +261,14 @@ export function createFacilityKit() {
     } else {
       conveyor(group, 1.3, accent);
       for (const x of [-1.35, 0, 1.35]) {
-        box(group, x, 1.42, 1.3, 1.13, 0.16, 0.93, materials.dark);
+        const pack = new THREE.Group();
+        pack.position.x = x;
+        group.add(pack);
+        box(pack, 0, 1.42, 1.3, 1.13, 0.16, 0.93, materials.dark);
         for (const dx of [-0.25, 0.25])
-          for (const dz of [-0.22, 0.22])
-            maki(group, x + dx, 1.5, 1.3 + dz, 0.72);
-        if (x > 0) box(group, x, 1.78, 1.3, 1.12, 0.11, 0.93, materials.glass);
+          for (const dz of [-0.22, 0.22]) maki(pack, dx, 1.5, 1.3 + dz, 0.72);
+        if (x > 0) box(pack, 0, 1.78, 1.3, 1.12, 0.11, 0.93, materials.glass);
+        beltItems.push({ group: pack, startX: x, speed: 0.15 });
       }
       // Chiller and tray sealer: distinct silhouettes beside the packing belt.
       box(group, -1.3, 1.3, -1.35, 1.9, 2.4, 1.7, materials.enamel);
@@ -277,6 +286,15 @@ export function createFacilityKit() {
   }
   return {
     buildZone,
+    update(seconds: number) {
+      for (const item of beltItems) {
+        const x = ((item.startX + 2.2 + seconds * item.speed) % 4.4) - 2.2;
+        item.group.position.x = x;
+        item.group.scale.setScalar(
+          THREE.MathUtils.clamp((2.2 - Math.abs(x)) / 0.55, 0, 1),
+        );
+      }
+    },
     dispose() {
       Object.values(geometries).forEach((g) => g.dispose());
       Object.values(materials).forEach((m) => m.dispose());

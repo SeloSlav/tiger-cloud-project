@@ -34,7 +34,11 @@ Open the local URL printed by the server (normally http://localhost:3000).
 4. Select **C1** and scrub to around **08:25 UTC** to see a deliberate telemetry gap. Missing data is visibly unknown and excluded from exposure calculations.
 5. Export the selected zone's history as CSV, limited to the current replay position.
 
-Drag the production floor to orbit, use the zoom buttons, and reset the camera at any time. Each zone has distinct procedural equipment, recognizable ingredients and finished sushi, plus a keyboard-accessible button. If WebGL is unavailable, the chart, replay, zone controls and metrics remain usable. Playback starts only on request; the 3D scene renders on changes rather than running a permanent animation loop.
+Selecting equipment or a zone button smoothly brings that area into close view. The other floating labels and floor outlines disappear; **Whole factory** restores the overview. Orbit and zoom remain available in either view.
+
+Six procedural operators work at the benches while three runners carry fish, ingredients and sushi trays between stations. Maki rolls and packed trays move along the conveyors. The activity button pauses the factory animation independently of the temperature replay. Reduced-motion preferences start the factory paused and make camera transitions immediate. Animation runs at a capped render rate and suspends while the scene is offscreen or the tab is hidden.
+
+Each zone has a keyboard-accessible selection button. If WebGL is unavailable, the chart, replay, zone controls and metrics remain usable.
 
 ## Why thermal debt?
 
@@ -133,6 +137,9 @@ This initializes the actual stdio MCP server and verifies that `db_execute_query
 | `app/page.tsx`                     | Shared replay state, controls, zone details, CSV export        |
 | `components/warehouse.tsx`         | Orthographic Three.js scene, picking, orbit controls, disposal |
 | `lib/facility-scene.ts`            | Shared geometry kit for prep benches, equipment and sushi      |
+| `lib/facility-camera.ts`           | Responsive zone framing and camera transition parameters       |
+| `lib/factory-activity.ts`          | Articulated workers, tray cargo and procedural work poses      |
+| `lib/factory-motion.ts`            | Deterministic delivery routes and pickup/dropoff phases        |
 | `components/temperature-chart.tsx` | SVG temperature history with explicit gaps                     |
 | `lib/telemetry.ts`                 | Deterministic fixture and tested exposure calculation          |
 | `db/001_schema.sql`                | Hypertable, continuous aggregate and Hypercore policy          |
@@ -153,6 +160,8 @@ npm start
 ```
 
 Tests cover exposure magnitude/duration, exact thresholds, missing/partial buckets, recovered temperatures, replay cutoffs and deterministic incidents. `npm start` runs the built Worker locally through Wrangler.
+
+Scene checks cover camera framing across aspect ratios, delivery continuity, pickup/dropoff state, equipment clearance and the worker geometry budget. The `?scene-debug=1` URL option displays the authored delivery paths. Motion is deterministic in elapsed seconds and independent of the historical temperature replay.
 
 The frontend uses the Sites Vinext/React starter and can deploy as a Cloudflare Worker. `.openai/hosting.json` is this demo's Sites project binding; create your own Site and replace its project ID when deploying a fork. No database credentials are needed by the deployment.
 

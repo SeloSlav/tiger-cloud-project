@@ -61,12 +61,14 @@ type ModelDocument = Document & {
 export default function Home() {
   const [metric, setMetric] = useState<Metric>('temperature');
   const [selected, setSelected] = useState<ZoneId>('B2');
+  const [focusedZone, setFocusedZone] = useState<ZoneId | null>(null);
+  const [focusRevision, setFocusRevision] = useState(0);
   const [index, setIndex] = useState(INITIAL_INDEX);
   const [playing, setPlaying] = useState(false);
-  const latest = useRef({ index, selected, metric });
+  const latest = useRef({ index, selected, metric, focusedZone });
   useEffect(() => {
-    latest.current = { index, selected, metric };
-  }, [index, selected, metric]);
+    latest.current = { index, selected, metric, focusedZone };
+  }, [index, selected, metric, focusedZone]);
   const summaries = useMemo(
     () => ZONES.map((z) => ({ ...z, ...summarize(data.zones[z.id], index) })),
     [index],
@@ -85,6 +87,11 @@ export default function Home() {
   const selectTime = (next: number) => {
     setPlaying(false);
     setIndex(next);
+  };
+  const selectZone = (zone: ZoneId) => {
+    setSelected(zone);
+    setFocusedZone(zone);
+    setFocusRevision((value) => value + 1);
   };
   useEffect(() => {
     if (!playing) return;
@@ -150,6 +157,8 @@ export default function Home() {
             throw new Error('Invalid zone, index or metric.');
           flushSync(() => {
             setSelected(v.zone as ZoneId);
+            setFocusedZone(v.zone as ZoneId);
+            setFocusRevision((value) => value + 1);
             setIndex(Number(v.index));
             setMetric(v.metric as Metric);
             setPlaying(false);
@@ -315,7 +324,10 @@ export default function Home() {
               zones={summaries}
               metric={metric}
               selected={selected}
-              onSelect={setSelected}
+              focusedZone={focusedZone}
+              focusRevision={focusRevision}
+              onOverview={() => setFocusedZone(null)}
+              onSelect={selectZone}
             />
           </Suspense>
           <div className="zone-selector" aria-label="Select production zone">
@@ -324,7 +336,7 @@ export default function Home() {
                 key={z.id}
                 aria-pressed={selected === z.id}
                 aria-label={`${z.name}, zone ${z.id}, ${z.temperature === null ? 'no data' : z.temperature.toFixed(1) + ' degrees Celsius'}`}
-                onClick={() => setSelected(z.id)}
+                onClick={() => selectZone(z.id)}
               >
                 <i
                   style={{
@@ -522,7 +534,7 @@ export default function Home() {
               key={event.index}
               onClick={() => {
                 selectTime(event.index);
-                setSelected(event.zone);
+                selectZone(event.zone);
               }}
             >
               <span className="event-number">0{n + 1}</span>

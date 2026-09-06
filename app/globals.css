@@ -647,6 +647,8 @@ h2 {
 }
 .warehouse-canvas canvas {
   display: block;
+  width: 100%;
+  height: 100%;
   touch-action: none;
 }
 .map-caption {
@@ -657,6 +659,11 @@ h2 {
   letter-spacing: 1.8px;
   color: #6d878f;
   pointer-events: none;
+  max-width: calc(100% - 200px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-transform: uppercase;
 }
 .map-caption span {
   margin: 0 8px;
@@ -686,6 +693,44 @@ h2 {
 }
 .camera-buttons button:hover {
   background: #30474a;
+}
+.scene-footer {
+  position: absolute;
+  bottom: 12px;
+  left: 24px;
+  right: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: #91a8ae;
+  font-size: 12px;
+}
+.scene-footer:has(.overview-button) {
+  justify-content: space-between;
+}
+.overview-button {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  gap: 6px;
+  color: #d9edc3;
+  border: 1px solid #4e6b59;
+  border-radius: 5px;
+  padding: 7px 10px;
+  background: #1b3029e8;
+}
+@media (max-width: 520px) {
+  .scene-footer {
+    left: 17px;
+    right: 17px;
+    font-size: 11px;
+    gap: 8px;
+  }
+  .scene-footer:has(.overview-button) > span {
+    max-width: 125px;
+    text-align: right;
+  }
 }
 .orbit-hint {
   position: absolute;

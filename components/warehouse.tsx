@@ -1,10 +1,26 @@
 'use client';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { RotateCcw, Minus, Plus } from 'lucide-react';
+import { RotateCcw, Minus, Plus, Play, Pause, ArrowLeft } from 'lucide-react';
 import { ZONES, colorFor, type Metric, type ZoneId } from '@/lib/telemetry';
 import { createFacilityKit } from '@/lib/facility-scene';
+import { createFactoryActivity } from '@/lib/factory-activity';
+import {
+  CAMERA,
+  cameraEase,
+  facilityFrustum,
+  facilityShot,
+} from '@/lib/facility-camera';
+
+const subscribeMotion = (change: () => void) => {
+  const media = window.matchMedia('(prefers-reduced-motion: reduce)');
+  media.addEventListener('change', change);
+  return () => media.removeEventListener('change', change);
+};
+const motionSnapshot = () =>
+  window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const serverMotionSnapshot = () => false;
 
 export type ZoneState = {
   id: ZoneId;
@@ -14,20 +30,31 @@ export type ZoneState = {
 type Props = {
   zones: ZoneState[];
   selected: ZoneId;
+  focusedZone: ZoneId | null;
+  focusRevision: number;
+  onOverview: () => void;
   metric: Metric;
   onSelect: (id: ZoneId) => void;
 };
 
 export default function Warehouse(props: Props) {
+  const reducedMotion = useSyncExternalStore(
+    subscribeMotion,
+    motionSnapshot,
+    serverMotionSnapshot,
+  );
+  const [motion, setMotion] = useState<'auto' | 'on' | 'off'>('auto');
+  const activityRunning =
+    motion === 'on' || (motion === 'auto' && !reducedMotion);
   const host = useRef<HTMLDivElement>(null);
-  const live = useRef(props);
+  const live = useRef({ ...props, activityRunning, reducedMotion });
   const update = useRef<() => void>(() => {});
   const cameraAction = useRef<(action: string) => void>(() => {});
   const [failed, setFailed] = useState(false);
   useEffect(() => {
-    live.current = props;
+    live.current = { ...props, activityRunning, reducedMotion };
     update.current();
-  }, [props]);
+  }, [props, activityRunning, reducedMotion]);
   useEffect(() => {
     const container = host.current;
     if (!container) return;
@@ -52,6 +79,7 @@ export default function Warehouse(props: Props) {
       'Nori Works sushi production facility: fish storage, vegetable and fish preparation, maki and nigiri assembly, and packing. Keyboard zone controls below.',
     );
     renderer.domElement.setAttribute('role', 'img');
+    renderer.domElement.tabIndex = 0;
     container.appendChild(renderer.domElement);
     const scene = new THREE.Scene();
     const camera = new THREE.OrthographicCamera(-18, 18, 12, -12, 0.1, 150);
@@ -63,8 +91,8 @@ export default function Warehouse(props: Props) {
     controls.enableDamping = false;
     controls.minPolarAngle = 0.25;
     controls.maxPolarAngle = Math.PI * 0.43;
-    controls.minZoom = 0.75;
-    controls.maxZoom = 1.7;
+    controls.minZoom = CAMERA.minZoom;
+    controls.maxZoom = CAMERA.maxZoom;
     controls.zoomSpeed = 0.6;
     controls.update();
     controls.saveState();
@@ -79,6 +107,11 @@ export default function Warehouse(props: Props) {
     const materials: THREE.Material[] = [];
     const textures: THREE.Texture[] = [];
     const facility = createFacilityKit();
+    const activity = createFactoryActivity();
+    scene.add(activity.root);
+    activity.debugRoutes.visible = new URLSearchParams(
+      window.location.search,
+    ).has('scene-debug');
     const boxGeo = new THREE.BoxGeometry(1, 1, 1);
     geometries.push(boxGeo);
     const material = (color: string, metalness = 0.15) => {
@@ -175,6 +208,7 @@ export default function Warehouse(props: Props) {
       label.scale.set(4.6, 2.1, 1);
       label.renderOrder = 5;
       group.add(label);
+      picks.push(label);
       group.traverse((child) => {
         if (child instanceof THREE.Mesh && child !== plate) picks.push(child);
       });
@@ -186,11 +220,130 @@ export default function Warehouse(props: Props) {
         edgeMat,
         canvas,
         texture,
+        label,
+        plate,
+        edge,
       };
     });
     let disposed = false;
+    let contextLost = false;
+    let onScreen = true;
+    let aspect = 1;
+    let frame = 0;
+    let previousFrame = 0;
+    let previousRender = 0;
+    let seconds = 0;
+    let previousActivity = 0;
+    let applyingCamera = false;
+    let lastFocus = live.current.focusedZone;
+    let lastFocusRevision = live.current.focusRevision;
+    type Transition = {
+      position: THREE.Vector3;
+      target: THREE.Vector3;
+      zoom: number;
+      quaternion: THREE.Quaternion;
+      to: ReturnType<typeof facilityShot>;
+      elapsed: number;
+    };
+    let transition: Transition | null = null;
     const render = () => {
-      if (!disposed) renderer.render(scene, camera);
+      if (!disposed && !contextLost) renderer.render(scene, camera);
+    };
+    const updateCamera = (
+      position: THREE.Vector3,
+      target: THREE.Vector3,
+      zoom: number,
+      quaternion?: THREE.Quaternion,
+    ) => {
+      camera.position.copy(position);
+      controls.target.copy(target);
+      camera.zoom = zoom;
+      camera.updateProjectionMatrix();
+      applyingCamera = true;
+      if (quaternion) camera.quaternion.copy(quaternion);
+      else controls.update();
+      applyingCamera = false;
+    };
+    const scratchPosition = new THREE.Vector3(),
+      scratchTarget = new THREE.Vector3();
+    const scratchQuaternion = new THREE.Quaternion();
+    const canAnimate = () =>
+      !disposed && !contextLost && onScreen && !document.hidden;
+    const wake = () => {
+      if (
+        !frame &&
+        canAnimate() &&
+        (transition || live.current.activityRunning)
+      )
+        frame = requestAnimationFrame(tick);
+    };
+    function tick(now: number) {
+      frame = 0;
+      if (!canAnimate()) {
+        previousFrame = 0;
+        return;
+      }
+      const delta = previousFrame
+        ? Math.min((now - previousFrame) / 1000, 0.05)
+        : 0;
+      previousFrame = now;
+      if (live.current.activityRunning) seconds += delta;
+      const cameraMoving = transition !== null;
+      if (transition) {
+        transition.elapsed += delta;
+        const t = live.current.reducedMotion
+          ? 1
+          : Math.min(transition.elapsed / CAMERA.transitionSeconds, 1);
+        const eased = cameraEase(t);
+        updateCamera(
+          scratchPosition.lerpVectors(
+            transition.position,
+            transition.to.position,
+            eased,
+          ),
+          scratchTarget.lerpVectors(
+            transition.target,
+            transition.to.target,
+            eased,
+          ),
+          THREE.MathUtils.lerp(transition.zoom, transition.to.zoom, eased),
+          t < 1
+            ? scratchQuaternion.slerpQuaternions(
+                transition.quaternion,
+                transition.to.quaternion,
+                eased,
+              )
+            : undefined,
+        );
+        if (t === 1) transition = null;
+      }
+      if (cameraMoving || now - previousRender >= 1000 / 30) {
+        activity.update(seconds, seconds - previousActivity);
+        facility.update(seconds);
+        previousActivity = seconds;
+        previousRender = now;
+        render();
+      }
+      if (!transition && !live.current.activityRunning) previousFrame = 0;
+      wake();
+    }
+    const aim = (id: ZoneId | null, immediate = false) => {
+      const to = facilityShot(aspect, id);
+      if (immediate || live.current.reducedMotion) {
+        transition = null;
+        updateCamera(to.position, to.target, to.zoom);
+        render();
+      } else {
+        transition = {
+          position: camera.position.clone(),
+          target: controls.target.clone(),
+          zoom: camera.zoom,
+          quaternion: camera.quaternion.clone(),
+          to,
+          elapsed: 0,
+        };
+        wake();
+      }
     };
     const recolor = () => {
       for (const zone of groups) {
@@ -201,6 +354,13 @@ export default function Warehouse(props: Props) {
           live.current.metric,
         );
         const selected = live.current.selected === zone.id;
+        const focused = live.current.focusedZone === zone.id;
+        const visible = live.current.focusedZone === null || focused;
+        zone.label.visible = visible;
+        zone.plate.visible = visible;
+        zone.edge.visible = visible;
+        zone.label.scale.set(focused ? 2.9 : 4.6, focused ? 1.33 : 2.1, 1);
+        zone.label.position.set(0, focused ? 3.65 : 4.1, focused ? -1.5 : 0);
         zone.tint.color.set(color);
         zone.tint.emissive.set(color);
         zone.tint.opacity = selected ? 0.5 : 0.24;
@@ -248,31 +408,57 @@ export default function Warehouse(props: Props) {
       }
       render();
     };
-    update.current = recolor;
+    update.current = () => {
+      recolor();
+      if (
+        lastFocus !== live.current.focusedZone ||
+        lastFocusRevision !== live.current.focusRevision
+      ) {
+        lastFocus = live.current.focusedZone;
+        lastFocusRevision = live.current.focusRevision;
+        aim(lastFocus);
+      }
+      wake();
+    };
+    let width = 0,
+      height = 0;
     const resize = () => {
       const w = container.clientWidth,
         h = container.clientHeight;
-      if (!w || !h) return;
-      const a = w / h;
-      const half = Math.max(11.2, 16 / a);
-      camera.left = -half * a;
-      camera.right = half * a;
-      camera.top = half;
-      camera.bottom = -half;
+      if (!w || !h || (w === width && h === height)) return;
+      width = w;
+      height = h;
+      aspect = w / h;
+      const { halfWidth, halfHeight } = facilityFrustum(aspect);
+      camera.left = -halfWidth;
+      camera.right = halfWidth;
+      camera.top = halfHeight;
+      camera.bottom = -halfHeight;
       camera.updateProjectionMatrix();
-      renderer.setSize(w, h);
-      render();
+      renderer.setSize(w, h, false);
+      aim(live.current.focusedZone, true);
     };
     const observer = new ResizeObserver(resize);
     observer.observe(container);
-    controls.addEventListener('change', render);
+    const controlsChange = () => {
+      if (!applyingCamera) render();
+    };
+    const interruptCamera = () => {
+      transition = null;
+    };
+    controls.addEventListener('change', controlsChange);
+    controls.addEventListener('start', interruptCamera);
     cameraAction.current = (action) => {
-      if (action === 'reset') controls.reset();
-      else {
+      transition = null;
+      if (action === 'reset') {
+        lastFocus = null;
+        live.current.onOverview();
+        aim(null);
+      } else {
         camera.zoom = THREE.MathUtils.clamp(
           camera.zoom * (action === 'in' ? 1.16 : 1 / 1.16),
-          0.75,
-          1.7,
+          CAMERA.minZoom,
+          CAMERA.maxZoom,
         );
         camera.updateProjectionMatrix();
       }
@@ -295,26 +481,64 @@ export default function Warehouse(props: Props) {
         ),
         camera,
       );
-      const hit = ray.intersectObjects(picks, false)[0];
+      const hit = ray.intersectObjects(
+        picks.filter((object) => object.visible),
+        false,
+      )[0];
       if (hit) {
         let object: THREE.Object3D | null = hit.object;
         while (object && !object.userData.zone) object = object.parent;
-        if (object?.userData.zone) live.current.onSelect(object.userData.zone);
+        if (object?.userData.zone) {
+          live.current.onSelect(object.userData.zone);
+        }
       }
     };
     const lost = (e: Event) => {
       e.preventDefault();
+      contextLost = true;
+      cancelAnimationFrame(frame);
       setFailed(true);
     };
     renderer.domElement.addEventListener('pointerdown', down);
     renderer.domElement.addEventListener('pointerup', up);
     renderer.domElement.addEventListener('webglcontextlost', lost);
+    const suspend = () => {
+      cancelAnimationFrame(frame);
+      frame = 0;
+      previousFrame = 0;
+      if (canAnimate()) {
+        render();
+        wake();
+      }
+    };
+    const visibility = new IntersectionObserver(([entry]) => {
+      onScreen = entry.isIntersecting;
+      suspend();
+    });
+    visibility.observe(container);
+    document.addEventListener('visibilitychange', suspend);
+    const escape = (event: KeyboardEvent) => {
+      if (
+        event.key === 'Escape' &&
+        !event.defaultPrevented &&
+        event.target instanceof Element &&
+        event.target.closest('.map-panel')
+      )
+        cameraAction.current('reset');
+    };
+    document.addEventListener('keydown', escape);
     resize();
     recolor();
+    wake();
     return () => {
       disposed = true;
+      cancelAnimationFrame(frame);
       observer.disconnect();
-      controls.removeEventListener('change', render);
+      visibility.disconnect();
+      document.removeEventListener('visibilitychange', suspend);
+      document.removeEventListener('keydown', escape);
+      controls.removeEventListener('change', controlsChange);
+      controls.removeEventListener('start', interruptCamera);
       controls.dispose();
       renderer.domElement.removeEventListener('pointerdown', down);
       renderer.domElement.removeEventListener('pointerup', up);
@@ -323,6 +547,7 @@ export default function Warehouse(props: Props) {
       materials.forEach((m) => m.dispose());
       textures.forEach((t) => t.dispose());
       facility.dispose();
+      activity.dispose();
       renderer.dispose();
       renderer.domElement.remove();
       update.current = () => {};
@@ -330,7 +555,7 @@ export default function Warehouse(props: Props) {
     };
   }, []);
   return (
-    <div className="warehouse-wrap">
+    <section className="warehouse-wrap" aria-label="Production floor controls">
       <div
         className="warehouse-canvas"
         ref={host}
@@ -345,9 +570,27 @@ export default function Warehouse(props: Props) {
       ) : (
         <>
           <span className="map-caption">
-            NORI WORKS <span>/</span> PRODUCTION FLOOR
+            {props.focusedZone
+              ? `${props.focusedZone} / ${ZONES.find((z) => z.id === props.focusedZone)?.name}`
+              : 'NORI WORKS / PRODUCTION FLOOR'}
           </span>
           <div className="camera-buttons">
+            <button
+              onClick={() => setMotion(activityRunning ? 'off' : 'on')}
+              aria-pressed={activityRunning}
+              aria-label={
+                activityRunning
+                  ? 'Pause factory activity'
+                  : 'Play factory activity'
+              }
+              title={
+                activityRunning
+                  ? 'Pause factory activity'
+                  : 'Play factory activity'
+              }
+            >
+              {activityRunning ? <Pause size={14} /> : <Play size={14} />}
+            </button>
             <button
               onClick={() => cameraAction.current('out')}
               aria-label="Zoom out"
@@ -367,13 +610,24 @@ export default function Warehouse(props: Props) {
               <RotateCcw size={16} />
             </button>
           </div>
-          <p className="orbit-hint">
-            Drag to orbit <span>·</span> Scroll to zoom <span>·</span> Select a
-            zone
-          </p>
+          <div className="scene-footer">
+            {props.focusedZone && (
+              <button
+                className="overview-button"
+                onClick={() => cameraAction.current('reset')}
+              >
+                <ArrowLeft size={14} /> Whole factory
+              </button>
+            )}
+            <span>
+              {props.focusedZone
+                ? 'Drag to orbit · Esc for overview'
+                : 'Drag to orbit · Scroll to zoom · Select a zone'}
+            </span>
+          </div>
         </>
       )}
-    </div>
+    </section>
   );
 }
 function BoxFallback() {
