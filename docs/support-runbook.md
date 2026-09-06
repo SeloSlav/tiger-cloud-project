@@ -4,7 +4,7 @@ The demo turns a manufacturing question—“Which chilled production area warme
 
 The facility is fictional and all readings are synthetic. The following evidence comes from running the project's SQL on a real Tiger Cloud DEV service.
 
-## Verified state
+## Verified archive state
 
 Checked on **6 September 2026, 17:27 UTC**, through Tiger MCP:
 
@@ -20,7 +20,7 @@ Checked on **6 September 2026, 17:27 UTC**, through Tiger MCP:
 | Columnstore job                                    | Last run successful; 0 failures                |
 | Raw chunk                                          | 4–5 September UTC, still in row storage        |
 
-The raw chunk is younger than the seven-day columnstore threshold. A successful policy job does not mean it found an eligible chunk to convert. This demo demonstrates policy configuration, not measured compression savings.
+The archive's raw chunk is younger than its seven-day columnstore threshold. A successful policy job does not mean it found an eligible chunk to convert. The separate live schema has a one-day policy and measured columnstore savings; see [live monitoring](live-monitoring.md) for its runtime checks and storage results.
 
 Reproduce the checks:
 
@@ -49,11 +49,13 @@ WHERE hypertable_schema = 'frostline';
 
 Here the existing service already contained the demo. The onboarding banner's reason was not established; creating a second service would not resolve that discrepancy.
 
-Account authentication, database authentication and TLS trust are separate checks. CLI OAuth can expire while a saved database password remains valid. During this validation the direct `pg` client rejected the certificate chain with `SELF_SIGNED_CERT_IN_CHAIN`; the official Tiger MCP connection succeeded using its encrypted CLI defaults. That is not evidence that the direct certificate problem has been resolved. The direct client retains certificate verification; investigate the presented chain and obtain a trusted CA through the provider before treating that path as healthy. See [Tiger's SSL documentation](https://docs.timescale.com/use-timescale/latest/security/strict-ssl/).
+Account authentication, database authentication and TLS trust are separate checks. CLI OAuth can expire while a saved database password remains valid. During validation the direct `pg` client rejected the certificate chain with `SELF_SIGNED_CERT_IN_CHAIN`; Tiger MCP succeeded using its encrypted CLI defaults. Tiger's documentation confirms that free services do not receive publicly signed certificates. The archive's direct client retains certificate verification. The live API explicitly uses `FROSTLINE_TLS_MODE=require` for this free DEV service: encrypted traffic without CA verification, with no automatic fallback. Paid deployments with publicly signed certificates should retain the default `verify-full`. See [Tiger's SSL documentation](https://www.tigerdata.com/docs/use-timescale/latest/security/strict-ssl/).
 
 ## A chart stays stale after new readings arrive
 
-Follow the data in order: raw rows → materialized aggregate → exported JSON → deployed build. The website intentionally does not query Tiger at runtime.
+First identify the selected mode. **Live monitoring** follows raw rows → continuous aggregate / incident state → Vercel API → browser. Compare `latestReadingAt` with `queriedAt`, inspect the collector's job status and API response, and check the refresh policy. A successful HTTP request does not prove the sensors are fresh. [Live runtime and diagnostics](live-monitoring.md).
+
+**Shift archive** follows raw rows → materialized aggregate → exported JSON → deployed build. It is intentionally fixed and does not query Tiger at runtime:
 
 1. Confirm the raw timestamps and zone in the affected interval.
 2. Run `db:verify:mcp` to compare the raw mean/count with the materialized result.
@@ -105,6 +107,6 @@ For a customer's slow query, first capture the exact SQL, bound parameters, affe
 
 An update should identify impact, what has been confirmed, what remains uncertain, and the next check. For this example:
 
-> The existing database contains the six production zones and the materialized readings match the raw data. The public dashboard displays a saved shift, so new database rows appear after an export and deployment. I’m checking the requested time window against the refresh policy before publishing the updated archive.
+> The existing database contains the six production zones and the materialized readings match the raw data. The selected Shift archive view displays a saved shift, so new archive rows appear after an export and deployment. I’m checking the requested time window against the refresh policy before publishing the updated archive. Live monitoring uses a separate current feed.
 
 An escalation should include sanitized query text and parameters, extension/PostgreSQL versions, the incident timeline in UTC, query plan, relevant job errors, scope of affected zones, reproduction steps and attempted mitigations. Exclude passwords and connection strings with credentials. Keep ownership of the customer update while engineering investigates.

@@ -123,7 +123,7 @@ npm run db:seed:mcp
 npm run data:sync:mcp
 ```
 
-These use Tiger CLI's saved password and connection defaults. On newly provisioned services, Tiger may initially present a bootstrap certificate before installing its publicly signed certificate. The direct PostgreSQL scripts deliberately require certificate verification and may need to wait for that provisioning step; the MCP path uses Tiger's standard encrypted connection. See [Tiger's SSL documentation](https://docs.timescale.com/use-timescale/latest/security/strict-ssl/).
+These use Tiger CLI's saved password and connection defaults. On newly provisioned paid services, Tiger may initially present a bootstrap certificate before installing its publicly signed certificate. The direct PostgreSQL scripts deliberately require certificate verification; the MCP path uses Tiger's standard encrypted connection. See [Tiger's SSL documentation](https://www.tigerdata.com/docs/use-timescale/latest/security/strict-ssl/).
 
 Tiger's **free services do not receive publicly signed SSL certificates**. For the live API on this free DEV service, `FROSTLINE_TLS_MODE=require` explicitly selects an encrypted connection without CA verification, matching the CLI's default. Other deployments default to `verify-full`. The API never silently weakens TLS after a connection error. See [live deployment details](docs/live-monitoring.md).
 
@@ -160,25 +160,29 @@ This initializes the actual stdio MCP server and verifies that `db_execute_query
 
 ## Project map
 
-| Path                               | Purpose                                                        |
-| ---------------------------------- | -------------------------------------------------------------- |
-| `app/page.tsx`                     | Shared replay state, controls, zone details, CSV export        |
-| `components/warehouse.tsx`         | Orthographic Three.js scene, picking, orbit controls, disposal |
-| `lib/facility-scene.ts`            | Shared geometry kit for prep benches, equipment and sushi      |
-| `lib/facility-camera.ts`           | Responsive zone framing and camera transition parameters       |
-| `lib/factory-activity.ts`          | Articulated workers, tray cargo and procedural work poses      |
-| `lib/factory-motion.ts`            | Dependency-ordered production plan and object ownership        |
-| `components/temperature-chart.tsx` | SVG temperature history with explicit gaps                     |
-| `lib/telemetry.ts`                 | Deterministic fixture and tested exposure calculation          |
-| `db/001_schema.sql`                | Hypertable, continuous aggregate and Hypercore policy          |
-| `db/replay.sql`                    | Bounded time grid with missing-bucket preservation             |
-| `db/thermal-debt.sql`              | Independent SQL exposure calculation                           |
-| `db/quality.sql`                   | Reject repeated sensor samples and unexpected identities       |
-| `db/diagnostics.sql`               | Compare raw data and rollups; inspect jobs and chunks          |
-| `scripts/verify-mcp.ts`            | Read-only Tiger diagnostics, SQL regression and query plan     |
-| `scripts/seed.ts`                  | Idempotent synthetic ingestion and historical refresh          |
-| `scripts/export.ts`                | SQL export and parity verification                             |
-| `data/telemetry.json`              | Portable, nonsecret replay dataset                             |
+| Path                                    | Purpose                                                           |
+| --------------------------------------- | ----------------------------------------------------------------- |
+| `app/page.tsx`                          | Live/archive state, incidents, zone details, CSV export           |
+| `components/use-live-monitor.ts`        | Live API polling, timeout, visibility and interrupted updates     |
+| `lib/live-monitor.ts`                   | API validation, sensor freshness and SQL exposure parity          |
+| `api/monitor.ts`, `server/monitor.ts`   | Read-only Vercel endpoint and restricted PostgreSQL connection    |
+| `db/002_live.sql`, `db/003_monitor.sql` | Live ingestion, incidents, storage policies and bounded API query |
+| `components/warehouse.tsx`              | Orthographic Three.js scene, picking, orbit controls, disposal    |
+| `lib/facility-scene.ts`                 | Shared geometry kit for prep benches, equipment and sushi         |
+| `lib/facility-camera.ts`                | Responsive zone framing and camera transition parameters          |
+| `lib/factory-activity.ts`               | Articulated workers, tray cargo and procedural work poses         |
+| `lib/factory-motion.ts`                 | Dependency-ordered production plan and object ownership           |
+| `components/temperature-chart.tsx`      | SVG temperature history with explicit gaps                        |
+| `lib/telemetry.ts`                      | Deterministic fixture and tested exposure calculation             |
+| `db/001_schema.sql`                     | Hypertable, continuous aggregate and Hypercore policy             |
+| `db/replay.sql`                         | Bounded time grid with missing-bucket preservation                |
+| `db/thermal-debt.sql`                   | Independent SQL exposure calculation                              |
+| `db/quality.sql`                        | Reject repeated sensor samples and unexpected identities          |
+| `db/diagnostics.sql`                    | Compare raw data and rollups; inspect jobs and chunks             |
+| `scripts/verify-mcp.ts`                 | Read-only Tiger diagnostics, SQL regression and query plan        |
+| `scripts/seed.ts`                       | Idempotent synthetic ingestion and historical refresh             |
+| `scripts/export.ts`                     | SQL export and parity verification                                |
+| `data/telemetry.json`                   | Portable, nonsecret replay dataset                                |
 
 ## Development and checks
 
@@ -190,21 +194,21 @@ npm run build
 npm start
 ```
 
-Tests cover exposure magnitude/duration, exact thresholds, missing/partial buckets, recovered temperatures, replay cutoffs and deterministic incidents. `npm start` runs the built Worker locally through Wrangler.
+Tests cover exposure magnitude/duration, exact thresholds, missing/partial buckets, recovered temperatures, replay cutoffs, stale live feeds and SQL/client parity validation. `npm run db:verify:live` additionally exercises incident transitions against Tiger in a rolled-back transaction. `npm start` runs the built Worker locally through Wrangler.
 
 Scene checks cover camera framing, batch dependencies, exclusive tray ownership, continuous handoffs and loop boundaries, worker and equipment clearance, glove contact, activity density and the pooled geometry budget. The floor averages more than five visible walkers and at least 2.5 loaded trays in transit. `?scene-debug=1` displays walking routes; add `&scene-time=90` to inspect a reproducible paused moment. Motion is deterministic in elapsed seconds and independent of temperature replay. There is no post-processing pass; the regular rendering is also the no-post baseline.
 
-The frontend uses the Sites Vinext/React starter and can deploy as a Cloudflare Worker. `.openai/hosting.json` is this demo's Sites project binding; create your own Site and replace its project ID when deploying a fork. No database credentials are needed by the deployment.
+The frontend uses the Sites Vinext/React starter and can deploy as a Cloudflare Worker. `.openai/hosting.json` is this project's Sites binding; create your own Site and replace its project ID when deploying a fork. Frontend deployments need no database credentials; live reads go through the Vercel API.
 
 ### GitHub Pages
 
-The [public demo](https://seloslav.github.io/tiger-cloud-project/) uses the same app and checked-in Tiger snapshot, exported to static HTML with hydrated React and Three.js:
+The [public dashboard](https://seloslav.github.io/tiger-cloud-project/) uses the same app, exported to static HTML with hydrated React and Three.js. It queries the Vercel API for live monitoring and bundles the checked-in Tiger snapshot for Shift archive:
 
 ```sh
 npm run build:pages
 ```
 
-The build checks local asset references and packages `out/` for the `/tiger-cloud-project/` URL prefix. `.github/workflows/pages.yml` tests and deploys every push to `main` through GitHub Actions. No Tiger password or database service is required by Pages. The replay is a historical archive; the animated workers are procedural scene activity.
+The build checks local asset references and packages `out/` for the `/tiger-cloud-project/` URL prefix. `.github/workflows/pages.yml` tests and deploys every push to `main` through GitHub Actions. Pages holds no database secrets. Live monitoring requires the running Tiger service and Vercel API; the archive remains usable independently. The animated workers are procedural scene activity.
 
 For a fork with a different repository name, update the prefix in `next.config.ts`, `app/layout.tsx` and `scripts/package-pages.mjs`, then enable **Settings → Pages → GitHub Actions**. The default `npm run build` continues to target the Worker. A build-only Windows preload yields before Vinext exits to avoid [Node's fetch teardown issue](https://github.com/nodejs/node/issues/56645); it preserves the exit status and is not shipped to browsers.
 
@@ -212,6 +216,6 @@ Optional browser WebMCP exposes `inspect_frostline` and `set_frostline_replay` w
 
 ## Scope and validation limits
 
-This is a focused portfolio experiment: a fixed snapshot, one facility, six zones and one incident. The exporter enforces the seeded one-reading-per-known-sensor-per-bucket contract. A real ingestion pipeline would need an equipment registry, changing sensor membership, event-time deduplication and an explicit policy for irregular sampling and late arrivals. Historical refreshes and raw-data retention must be coordinated before adding retention jobs. The support walkthrough includes one small query-plan measurement; it is not evidence of production-scale performance. No GPU benchmark or broad browser/device QA is claimed.
+This is a working monitoring prototype for one facility, six zones and 24 simulated sensors. It includes a sensor registry, minute-level deduplication, persisted incidents, aggregate refresh and coordinated retention. Connecting a real facility would require an authenticated hardware ingestion adapter, customer access controls, changing sensor membership and a policy for irregular sampling and late arrivals. Notifications and operator acknowledgements are outside this version. The support walkthrough includes one small query-plan measurement; it is not evidence of production-scale performance. No GPU benchmark or broad browser/device QA is claimed. See the [live architecture and operational boundaries](docs/live-monitoring.md).
 
 Built by [SeloSlav](https://github.com/SeloSlav). [MIT licensed](LICENSE). Independent demo; not affiliated with Tiger Data.

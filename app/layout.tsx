@@ -18,7 +18,7 @@ export const metadata: Metadata = {
   },
   title: 'Frostline — Nori Works, Zagreb',
   description:
-    'Inside Nori Works: a 3D sushi production facility in Zagreb. Replay a shift, trace temperature excursions and compare thermal debt with Tiger Data.',
+    'Monitor Nori Works, a 3D sushi production facility in Zagreb. Track current temperatures, sustained incidents and rolling exposure with Tiger Data.',
 };
 
 export default function RootLayout({

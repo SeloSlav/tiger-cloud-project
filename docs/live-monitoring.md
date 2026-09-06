@@ -6,15 +6,15 @@ The facility and sensor adapter are simulated. Ingestion, aggregation, incident 
 
 ## Runtime
 
-| Component | Responsibility |
-| --- | --- |
-| Tiger `frostline_live.sensors` | Registry of 24 sensors assigned to six zones |
-| Tiger `frostline_live.readings` | One-minute observations, daily hypertable chunks |
-| Tiger background job | Collect a current observation every minute and evaluate incidents |
-| Tiger `frostline_live.zone_5m` | Continuous aggregate with materialized history and a real-time raw tail |
-| Tiger `frostline_live.incidents` | Persisted opening, confirmation, peak, last observation and recovery |
-| Vercel `/api/monitor` | A bounded read-only database query, cached for 15 seconds |
-| GitHub Pages / Sites | React and Three.js interface, polling every 30 seconds while visible |
+| Component                        | Responsibility                                                          |
+| -------------------------------- | ----------------------------------------------------------------------- |
+| Tiger `frostline_live.sensors`   | Registry of 24 sensors assigned to six zones                            |
+| Tiger `frostline_live.readings`  | One-minute observations, daily hypertable chunks                        |
+| Tiger background job             | Collect a current observation every minute and evaluate incidents       |
+| Tiger `frostline_live.zone_5m`   | Continuous aggregate with materialized history and a real-time raw tail |
+| Tiger `frostline_live.incidents` | Persisted opening, confirmation, peak, last observation and recovery    |
+| Vercel `/api/monitor`            | A bounded read-only database query, cached for 15 seconds               |
+| GitHub Pages / Sites             | React and Three.js interface, polling every 30 seconds while visible    |
 
 The backend is deployed in **martin-selooilscom's Team (Pro)**. The original GitHub Pages link remains the frontend. It contains a public API URL, never a database credential.
 

@@ -1,5 +1,5 @@
 'use client';
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import Link from 'next/link';
 import {
@@ -82,26 +82,30 @@ export default function Home() {
     mode,
     data,
     live,
+    stale,
   });
   useEffect(() => {
-    latest.current = { index, selected, metric, focusedZone, mode, data, live };
-  }, [index, selected, metric, focusedZone, mode, data, live]);
-  const summaries = useMemo(
-    () =>
-      ZONES.map((z) => ({
-        ...z,
-        ...summarize(data.zones[z.id], index),
-        ...(isLive
-          ? {
-              temperature: stale
-                ? null
-                : (live?.current[z.id].temperature ?? null),
-              sensors: stale ? 0 : (live?.current[z.id].sensors ?? 0),
-            }
-          : {}),
-      })),
-    [data, index, isLive, live, stale],
-  );
+    latest.current = {
+      index,
+      selected,
+      metric,
+      focusedZone,
+      mode,
+      data,
+      live,
+      stale,
+    };
+  }, [index, selected, metric, focusedZone, mode, data, live, stale]);
+  const summaries = ZONES.map((z) => ({
+    ...z,
+    ...summarize(data.zones[z.id], index),
+    ...(isLive
+      ? {
+          temperature: stale ? null : (live?.current[z.id].temperature ?? null),
+          sensors: stale ? 0 : (live?.current[z.id].sensors ?? 0),
+        }
+      : {}),
+  }));
   const current = summaries.find((z) => z.id === selected)!;
   const valid = summaries.filter((z) => z.temperature !== null);
   const average = valid.length
@@ -166,7 +170,15 @@ export default function Home() {
             metric: state.metric,
             ...summarize(state.data.zones[state.selected], state.index),
             ...(state.mode === 'live'
-              ? state.live?.current[state.selected]
+              ? {
+                  ...state.live?.current[state.selected],
+                  temperature: state.stale
+                    ? null
+                    : (state.live?.current[state.selected].temperature ?? null),
+                  sensors: state.stale
+                    ? 0
+                    : (state.live?.current[state.selected].sensors ?? 0),
+                }
               : {}),
             source: state.data.source,
           };
@@ -316,14 +328,13 @@ export default function Home() {
             <TabsTrigger value="archive">Shift archive</TabsTrigger>
           </TabsList>
         </Tabs>
-        <p
+        <output
           className={`feed-status ${isLive && (stale || liveError) ? 'delayed' : ''}`}
-          role="status"
         >
           <Radio size={15} />
           {isLive ? liveStatus : '4 September 2026 · recorded shift'}
           {isLive && live && <span>Last reading {readingTime} UTC</span>}
-        </p>
+        </output>
       </div>
       <section
         className="metrics"
