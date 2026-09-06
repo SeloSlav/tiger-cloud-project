@@ -1,16 +1,16 @@
 import * as THREE from 'three';
 import {
-  DOCKS,
-  PRODUCTION,
-  WORKER_HOME,
+  BATCH_FLOWS,
+  PRODUCTION_ROUTES,
+  PRODUCTION_PERIOD,
+  DEMO_START,
+  MOTION,
   ease,
   mix,
-  sampleObject,
-  sampleWorker,
+  sampleBatch,
+  sampleRoute,
   type Pose,
-  type WorkerId,
 } from './factory-motion';
-
 export function createFactoryActivity() {
   const root = new THREE.Group();
   root.name = 'factory-activity';
@@ -83,75 +83,8 @@ export function createFactoryActivity() {
     h: number,
     d: number,
   ) => mesh(g, boxGeometry, m, x, y, z, w, h, d);
-  const objects = new Map<string, THREE.Group>();
-  const fishPieces = new Map<string, THREE.Mesh[]>();
-  for (const id of Object.keys(PRODUCTION.initial)) {
-    const group = new THREE.Group();
-    group.name = id;
-    group.userData.physicalObject = true;
-    objects.set(id, group);
-    root.add(group);
-    if (id.endsWith('-tray')) {
-      box(group, trayMat, 0, 0, 0, 0.98, 0.055, 0.62);
-      for (const z of [-0.3, 0.3])
-        box(group, trayMat, 0, 0.045, z, 0.98, 0.06, 0.03);
-      for (const x of [-0.5, 0.5])
-        box(group, steel, x, 0.035, 0, 0.055, 0.045, 0.22);
-      if (id !== 'vegetable-tray')
-        fishPieces.set(
-          id,
-          [-0.27, 0, 0.27].map((x) =>
-            mesh(group, roundGeometry, fishMat, x, 0.09, 0, 0.21, 0.12, 0.44),
-          ),
-        );
-    } else if (id.includes('-nori-')) {
-      mesh(group, capGeometry, nori, 0, 0, 0, 0.25, 0.055, 0.25);
-    } else if (id.includes('-rice-')) {
-      mesh(
-        group,
-        id.startsWith('maki') ? capGeometry : roundGeometry,
-        riceMat,
-        0,
-        0,
-        0,
-        0.205,
-        0.105,
-        id.startsWith('maki') ? 0.205 : 0.34,
-      );
-    } else if (id.includes('-vegetable-')) {
-      box(group, green, 0, 0, 0, 0.085, 0.09, 0.15);
-    } else {
-      box(group, glass, 0, 0, 0, 0.98, 0.035, 0.62);
-      for (const z of [-0.29, 0.29])
-        box(group, steel, 0, -0.06, z, 0.97, 0.12, 0.022);
-    }
-  }
-  // A component retains its identity when it becomes part of a finished tray.
-  const components = [...objects.keys()]
-    .filter((id) => !id.endsWith('-tray'))
-    .map((id) => {
-      const transfers = PRODUCTION.actions.filter(
-        (a) => a.object === id && a.kind === 'transfer',
-      );
-      const last = transfers[transfers.length - 1];
-      const tray = id.startsWith('maki') ? 'maki-tray' : 'nigiri-tray';
-      const at = id.endsWith('-lid')
-        ? DOCKS.sealer
-        : tray === 'maki-tray'
-          ? DOCKS.maki
-          : DOCKS.nigiri;
-      return {
-        id,
-        tray,
-        first: transfers[0].start,
-        end: last.end,
-        local: new THREE.Vector3(...last.to.position)
-          .sub(new THREE.Vector3(...at.position))
-          .applyAxisAngle(new THREE.Vector3(0, 1, 0), -at.heading),
-      };
-    });
   const down = new THREE.Vector3(0, -1, 0);
-  function worker(index: number, id: WorkerId) {
+  function worker(index: number, id: string) {
     const group = new THREE.Group();
     group.name = `worker-${id}`;
     root.add(group);
@@ -165,7 +98,7 @@ export function createFactoryActivity() {
     box(body, coat, 0, 1.08, 0, 0.48, 0.59, 0.3);
     box(
       body,
-      id === 'store' ? carrierApron : apron,
+      id.endsWith('-0') || id.endsWith('-1') ? carrierApron : apron,
       0,
       0.99,
       0.165,
@@ -216,31 +149,73 @@ export function createFactoryActivity() {
     });
     return { group, body, arms, legs };
   }
-  const workers = Object.keys(WORKER_HOME).map((id, index) => ({
-    id: id as WorkerId,
-    rig: worker(index, id as WorkerId),
+  const workers = PRODUCTION_ROUTES.map((route, i) => ({
+    route,
+    rig: worker(i, route.id),
   }));
-  const knives = PRODUCTION.actions
-    .filter(
-      (a) =>
-        a.kind === 'work' && (a.worker === 'prep' || a.worker === 'vegetables'),
-    )
-    .map((action) => {
-      const group = new THREE.Group();
-      group.name = `knife-${action.object}`;
-      root.add(group);
-      box(group, trayMat, 0, 0, 0, 0.08, 0.08, 0.18);
-      box(group, steel, 0, -0.03, 0.2, 0.022, 0.09, 0.32);
-      return {
+  const objects = new Map<string, THREE.Group>();
+  function tray(id: string, vegetables = false) {
+    const group = new THREE.Group();
+    group.name = id;
+    root.add(group);
+    objects.set(id, group);
+    box(group, trayMat, 0, 0, 0, 0.9, 0.055, 0.58);
+    for (const z of [-0.28, 0.28])
+      box(group, trayMat, 0, 0.035, z, 0.9, 0.06, 0.025);
+    for (const x of [-0.46, 0.46])
+      box(group, steel, x, 0.025, 0, 0.045, 0.04, 0.2);
+    const portions = [-0.26, 0, 0.26].map((x) =>
+      mesh(
         group,
-        action,
-        rest: new THREE.Vector3(
-          action.from.position[0] - 0.3,
-          1.44,
-          action.from.position[2] - 0.57,
-        ),
-      };
-    });
+        roundGeometry,
+        vegetables ? green : fishMat,
+        x,
+        0.09,
+        0,
+        0.2,
+        0.12,
+        0.4,
+      ),
+    );
+    return { group, portions };
+  }
+  const batches = BATCH_FLOWS.flatMap((flow) =>
+    Array.from({ length: flow.slots }, (_, slot) => {
+      const id = `${flow.product}-batch-${slot}`;
+      const payload = tray(id);
+      const bases = [-0.26, 0, 0.26].map((x, i) => {
+        const group = new THREE.Group();
+        group.name = `${id}-ingredients-${i}`;
+        root.add(group);
+        if (flow.product === 'maki')
+          mesh(group, capGeometry, nori, 0, -0.025, 0, 0.245, 0.15, 0.245);
+        mesh(
+          group,
+          flow.product === 'maki' ? capGeometry : roundGeometry,
+          riceMat,
+          0,
+          0.025,
+          0,
+          0.205,
+          0.12,
+          flow.product === 'maki' ? 0.205 : 0.32,
+        );
+        if (flow.product === 'maki')
+          box(group, green, 0.07, 0.09, 0, 0.055, 0.04, 0.08);
+        return { group, x };
+      });
+      const lid = new THREE.Group();
+      lid.name = `${id}-lid`;
+      root.add(lid);
+      box(lid, glass, 0, 0, 0, 0.9, 0.035, 0.58);
+      for (const z of [-0.275, 0.275])
+        box(lid, steel, 0, -0.05, z, 0.9, 0.1, 0.02);
+      return { flow, slot, id, ...payload, bases, lid };
+    }),
+  );
+  const vegetableTrays = PRODUCTION_ROUTES.filter(
+    (r) => r.product === 'vegetables',
+  ).map((route) => ({ route, ...tray(`${route.id}-tray`, true) }));
   const debugRoutes = new THREE.Group();
   debugRoutes.name = 'delivery-route-guides';
   debugRoutes.visible = false;
@@ -250,156 +225,152 @@ export function createFactoryActivity() {
     depthTest: false,
   });
   materials.push(lineMaterial);
-  const routeGeometries = PRODUCTION.actions
-    .filter((a) => a.kind === 'walk')
-    .map((a) => {
-      const g = new THREE.BufferGeometry().setFromPoints(
-        [a.from, a.to].map(
-          (p) => new THREE.Vector3(p.position[0], 0.18, p.position[2]),
-        ),
-      );
-      debugRoutes.add(new THREE.Line(g, lineMaterial));
-      return g;
-    });
+  const routeGeometries = PRODUCTION_ROUTES.flatMap((route) =>
+    route.actions
+      .filter((a) => a.kind === 'walk')
+      .map((a) => {
+        const geometry = new THREE.BufferGeometry().setFromPoints(
+          [a.from, a.to].map(
+            (p) => new THREE.Vector3(p.position[0], 0.18, p.position[2]),
+          ),
+        );
+        debugRoutes.add(new THREE.Line(geometry, lineMaterial));
+        return geometry;
+      }),
+  );
   const direction = new THREE.Vector3(),
     bend = new THREE.Vector3(),
     joint = new THREE.Vector3(),
     target = new THREE.Vector3();
-  function applyPose(group: THREE.Group, p: Pose) {
-    group.position.set(...p.position);
-    group.rotation.set(0, p.heading, 0);
+  const handTargets = new Map<string, THREE.Vector3>();
+  const cargo = new Map<string, THREE.Group>();
+  function applyPose(group: THREE.Group, state: Pose) {
+    group.position.set(...state.position);
+    group.rotation.set(0, state.heading, 0);
   }
   function update(seconds: number, _deltaSeconds = 0) {
-    const time = Math.max(0, Math.min(seconds, PRODUCTION.duration));
-    knives.forEach((tool) => {
-      tool.group.position.copy(tool.rest);
-      tool.group.rotation.set(0, Math.PI, 0);
-    });
-    objects.forEach((g, id) => {
-      applyPose(g, sampleObject(id, time));
-      g.userData.owner = 'station';
-    });
-    for (const part of components) {
-      const g = objects.get(part.id)!;
-      if (time >= part.end) {
-        const parent = objects.get(part.tray)!;
-        g.position
-          .copy(part.local)
-          .applyQuaternion(parent.quaternion)
-          .add(parent.position);
-        g.quaternion.copy(parent.quaternion);
-        g.userData.owner = part.tray;
-      } else if (part.id.includes('-vegetable-') && time < part.first) {
-        const tray = objects.get('vegetable-tray')!,
-          i = Number(part.id.at(-1));
-        g.position
-          .set(-(i - 1) * 0.24, 0.1, 0)
-          .applyQuaternion(tray.quaternion)
-          .add(tray.position);
-        g.quaternion.copy(tray.quaternion);
-        g.userData.owner = 'vegetable-tray';
-      }
-    }
-    for (const [id, pieces] of fishPieces) {
-      const cutting = PRODUCTION.actions.find(
-        (a) => a.object === id && a.label === 'Portion salmon',
-      )!;
-      const assembly = PRODUCTION.actions.find(
-        (a) =>
-          a.object === id &&
-          (a.label === 'Roll and portion maki' ||
-            a.label === 'Shape and top nigiri'),
-      )!;
-      const cut = ease((time - cutting.start) / (cutting.end - cutting.start));
-      const made = ease(
-        (time - assembly.start) / (assembly.end - assembly.start),
-      );
-      pieces.forEach((p) => {
-        p.scale.set(
-          mix(0.21, id === 'maki-tray' ? 0.085 : 0.22, made),
-          mix(0.12, 0.06, made),
-          mix(mix(0.44, 0.24, cut), id === 'maki-tray' ? 0.09 : 0.3, made),
+    const time = Math.max(0, seconds) + DEMO_START;
+    cargo.clear();
+    handTargets.clear();
+    for (const batch of batches) {
+      const state = sampleBatch(batch.flow, batch.slot, time);
+      applyPose(batch.group, state);
+      batch.group.visible = state.visible;
+      batch.group.userData.owner = state.owner?.id ?? 'station';
+      batch.group.userData.stage = state.stage;
+      if (state.owner) cargo.set(state.owner.id, batch.group);
+      const assembly = batch.flow.routes[3],
+        assemblyStart = batch.flow.starts[3] + assembly.workStart;
+      const assembling =
+        state.age >= assemblyStart && state.age < assemblyStart + assembly.work;
+      const assemblyProgress = (state.age - assemblyStart) / assembly.work;
+      for (const [i, base] of batch.bases.entries()) {
+        const progress = ease((assemblyProgress * 3 - i) / 0.85);
+        const source = new THREE.Vector3(
+          assembly.source.position[0] + 0.4,
+          1.43,
+          assembly.source.position[2] + (i - 1) * 0.2,
         );
-        p.position.y = mix(0.09, 0.2, made);
-      });
+        const destination = new THREE.Vector3(base.x, 0.12, 0)
+          .applyQuaternion(batch.group.quaternion)
+          .add(batch.group.position);
+        base.group.position.copy(source).lerp(destination, progress);
+        base.group.position.y += Math.sin(progress * Math.PI) * 0.18;
+        base.group.quaternion.copy(batch.group.quaternion);
+        base.group.visible = state.visible && state.age >= assemblyStart - 7;
+        const p = batch.portions[i];
+        p.position.y = mix(0.09, 0.23, progress);
+        p.scale.set(
+          mix(0.2, batch.flow.product === 'maki' ? 0.08 : 0.22, progress),
+          mix(0.12, 0.06, progress),
+          mix(0.4, batch.flow.product === 'maki' ? 0.09 : 0.3, progress),
+        );
+        if (assembling && Math.min(2, Math.floor(assemblyProgress * 3)) === i)
+          handTargets.set(assembly.id, base.group.position);
+      }
+      const packing = batch.flow.routes[4],
+        packingStart = batch.flow.starts[4] + packing.workStart;
+      const seal = ease((state.age - packingStart) / packing.work);
+      const lidDestination = new THREE.Vector3(0, 0.28, 0)
+        .applyQuaternion(batch.group.quaternion)
+        .add(batch.group.position);
+      batch.lid.position
+        .set(
+          packing.source.position[0] + 0.48,
+          packing.source.position[1] + 0.07,
+          packing.source.position[2],
+        )
+        .lerp(lidDestination, seal);
+      batch.lid.position.y += Math.sin(seal * Math.PI) * 0.2;
+      batch.lid.quaternion.copy(batch.group.quaternion);
+      batch.lid.visible = state.visible && state.age >= packingStart - 5;
+      if (state.age >= packingStart && state.age < packingStart + packing.work)
+        handTargets.set(packing.id, batch.lid.position);
     }
-    workers.forEach(({ id, rig }) => {
-      const state = sampleWorker(id, time),
-        a = state.action;
+    for (const item of vegetableTrays) {
+      const state = sampleRoute(item.route, time);
+      const afterDelivery =
+        state.time >= item.route.dropoff && state.time < item.route.returnedAt!;
+      // The same tote returns to prep after unloading. Returning workers never
+      // get a second, disconnected visual copy of the delivered tote.
+      const at = afterDelivery ? item.route.destination : item.route.source;
+      const p = state.cargo ?? { position: at.position, heading: at.heading };
+      applyPose(item.group, p);
+      item.group.userData.owner = state.cargo ? item.route.id : 'station';
+      item.portions.forEach((part) => {
+        part.scale.y = afterDelivery ? 0.05 : 0.12;
+      });
+      if (state.cargo) cargo.set(item.route.id, item.group);
+    }
+    workers.forEach(({ route, rig }) => {
+      const state = sampleRoute(route, time),
+        action = state.action;
       applyPose(rig.group, state);
-      rig.group.userData.action = a?.label ?? 'Waiting at station';
+      rig.group.visible = state.visible;
+      rig.group.userData.action = action?.kind ?? 'wait';
       const stride = state.walking
-        ? Math.sin((time - a!.start) * MOTION_STRIDE) * 0.38
+        ? Math.sin((state.time - action!.start) * 9) * 0.42
         : 0;
       rig.legs[0].rotation.x = stride;
       rig.legs[1].rotation.x = -stride;
-      // Keep the torso and held objects stable; secondary motion belongs to legs.
       rig.body.updateWorldMatrix(true, false);
-      let carrying: string | undefined;
-      for (const previous of PRODUCTION.actions) {
-        if (previous.worker !== id || previous.start > time) continue;
-        if (previous.kind === 'transfer' && previous.end <= time)
-          carrying = previous.label === 'Pick up' ? previous.object : undefined;
-      }
-      const objectId = a?.kind === 'transfer' ? a.object : carrying;
-      const object = objectId ? objects.get(objectId) : undefined;
-      const handling = a?.kind === 'transfer';
-      const tool = knives.find((knife) => knife.action === a);
+      const object = cargo.get(route.id);
       rig.arms.forEach((arm, side) => {
         const sign = side ? 1 : -1;
-        arm.target.set(sign * 0.3, 0.61, 0.05 + stride * sign * 0.22);
+        arm.target.set(sign * 0.3, 0.61, 0.04 + stride * sign * 0.24);
         if (object) {
-          const large =
-            objectId!.endsWith('-tray') || objectId!.endsWith('-lid');
           target
-            .set(large ? sign * 0.48 : sign * 0.085, 0.025, 0)
+            .set(sign * 0.45, 0.025, 0)
             .applyQuaternion(object.quaternion)
             .add(object.position);
           rig.body.worldToLocal(target);
           const reach =
-            handling && a!.label === 'Pick up' ? ease(state.progress / 0.2) : 1;
+            action?.kind === 'pickup' ? ease(state.progress / 0.2) : 1;
           const release =
-            handling && a!.label === 'Place on station'
+            action?.kind === 'dropoff' && route.product !== 'vegetables'
               ? 1 - ease((state.progress - 0.8) / 0.2)
               : 1;
           arm.target.lerp(target, reach * release);
-          object.userData.owner = id;
-        } else if (a?.kind === 'work') {
-          const tray = objects.get(a.object!)!;
-          target
-            .set(
-              sign * 0.18,
-              0.13 +
-                (side
-                  ? Math.abs(Math.sin(state.progress * Math.PI * 8)) * 0.1
-                  : 0),
-              0,
-            )
-            .applyQuaternion(tray.quaternion)
-            .add(tray.position);
-          rig.body.worldToLocal(target);
-          if (tool && side) {
-            const rest = rig.body.worldToLocal(tool.rest.clone());
-            if (state.progress < 0.08)
-              arm.target.lerp(rest, ease(state.progress / 0.08));
-            else if (state.progress > 0.92)
-              arm.target.lerp(rest, 1 - ease((state.progress - 0.92) / 0.08));
-            else
-              arm.target
-                .copy(rest)
-                .lerp(
-                  target,
-                  ease((state.progress - 0.08) / 0.12) *
-                    (1 - ease((state.progress - 0.8) / 0.12)),
-                );
-          } else
-            arm.target.lerp(
-              target,
-              ease(state.progress / 0.12) *
-                (1 - ease((state.progress - 0.88) / 0.12)),
+        } else if (action?.kind === 'work') {
+          const handled = handTargets.get(route.id);
+          if (handled && !side) target.copy(handled);
+          else {
+            const station = action.dock ?? route.source;
+            target.set(
+              station.position[0] + sign * 0.18,
+              station.position[1] +
+                0.16 +
+                Math.abs(Math.sin(state.progress * Math.PI * 8)) * 0.07,
+              station.position[2],
             );
+          }
+          rig.body.worldToLocal(target);
+          arm.target.lerp(
+            target,
+            ease(state.progress / 0.1) *
+              (1 - ease((state.progress - 0.9) / 0.1)),
+          );
         }
-        // Two-bone IK puts gloves on handles/ingredients, rather than waving near them.
         direction.copy(arm.target).sub(arm.origin);
         const distance = Math.min(0.838, Math.max(0.001, direction.length()));
         direction.normalize();
@@ -421,21 +392,19 @@ export function createFactoryActivity() {
         );
         arm.hand.position.copy(arm.target);
       });
-      if (tool && state.progress >= 0.08 && state.progress <= 0.92)
-        rig.body.localToWorld(
-          tool.group.position.copy(rig.arms[1].hand.position),
-        );
     });
     root.userData.productionTime = time;
-    root.userData.complete = time >= PRODUCTION.duration;
+    root.userData.workers = workers.length;
+    root.userData.movingTrays = cargo.size;
   }
   update(0);
   return {
     root,
     debugRoutes,
-    update,
     objects,
-    duration: PRODUCTION.duration,
+    update,
+    period: PRODUCTION_PERIOD,
+    rate: MOTION.demoRate,
     dispose() {
       [
         boxGeometry,
@@ -449,4 +418,3 @@ export function createFactoryActivity() {
     },
   };
 }
-const MOTION_STRIDE = 8.5;

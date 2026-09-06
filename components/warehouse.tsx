@@ -52,10 +52,8 @@ export default function Warehouse(props: Props) {
     serverMotionSnapshot,
   );
   const [motion, setMotion] = useState<'auto' | 'on' | 'off'>('auto');
-  const [productionComplete, setProductionComplete] = useState(false);
   const activityRunning =
-    !productionComplete &&
-    (motion === 'on' || (motion === 'auto' && !reducedMotion));
+    motion === 'on' || (motion === 'auto' && !reducedMotion);
   const host = useRef<HTMLDivElement>(null);
   const live = useRef({ ...props, activityRunning, reducedMotion });
   const update = useRef<() => void>(() => {});
@@ -125,7 +123,7 @@ export default function Warehouse(props: Props) {
     const inspectionTime = sceneParams.get('scene-time');
     const fixedTime =
       inspectionTime !== null && Number.isFinite(Number(inspectionTime))
-        ? Math.max(0, Math.min(Number(inspectionTime), activity.duration))
+        ? Math.max(0, Number(inspectionTime))
         : null;
     const boxGeo = new THREE.BoxGeometry(1, 1, 1);
     geometries.push(boxGeo);
@@ -289,10 +287,7 @@ export default function Warehouse(props: Props) {
       if (
         !frame &&
         canAnimate() &&
-        (transition ||
-          (live.current.activityRunning &&
-            fixedTime === null &&
-            seconds < activity.duration))
+        (transition || (live.current.activityRunning && fixedTime === null))
       )
         frame = requestAnimationFrame(tick);
     };
@@ -307,8 +302,7 @@ export default function Warehouse(props: Props) {
         : 0;
       previousFrame = now;
       if (live.current.activityRunning && fixedTime === null) {
-        seconds = Math.min(seconds + delta, activity.duration);
-        if (seconds === activity.duration) setProductionComplete(true);
+        seconds += delta * activity.rate;
       }
       const cameraMoving = transition !== null;
       if (transition) {
@@ -446,7 +440,6 @@ export default function Warehouse(props: Props) {
       previousActivity = seconds;
       previousFrame = 0;
       activity.update(seconds, 0);
-      setProductionComplete(false);
       setMotion('on');
       render();
       wake();
@@ -614,11 +607,7 @@ export default function Warehouse(props: Props) {
               <ListRestart size={16} />
             </button>
             <button
-              onClick={() =>
-                productionComplete
-                  ? restartProduction.current()
-                  : setMotion(activityRunning ? 'off' : 'on')
-              }
+              onClick={() => setMotion(activityRunning ? 'off' : 'on')}
               aria-pressed={activityRunning}
               aria-label={
                 activityRunning
@@ -662,11 +651,9 @@ export default function Warehouse(props: Props) {
               </button>
             )}
             <span>
-              {productionComplete
-                ? 'Batch packed and chilled · Press play to replay'
-                : props.focusedZone
-                  ? 'Drag to orbit · Esc for overview'
-                  : 'Drag to orbit · Scroll to zoom · Select a zone'}
+              {props.focusedZone
+                ? 'Drag to orbit · Esc for overview'
+                : 'Drag to orbit · Scroll to zoom · Select a zone'}
             </span>
           </div>
         </>
