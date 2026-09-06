@@ -14,9 +14,9 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   icons: { icon: '/favicon.svg' },
-  title: 'Frostline — Cold-chain intelligence',
+  title: 'Frostline — Nori Works, Zagreb',
   description:
-    'Replay cold-chain incidents in a 3D warehouse and compare thermal exposure with Tiger Data and TimescaleDB.',
+    'Inside Nori Works: a 3D sushi production facility in Zagreb. Replay a shift, trace temperature excursions and compare thermal debt with Tiger Data.',
 };
 
 export default function RootLayout({

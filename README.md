@@ -1,10 +1,19 @@
 # Frostline
 
-**A warehouse temperature can recover. Its heat exposure doesn't disappear.**
+**Sushi production, seen through temperature.**
 
-Frostline is a small cold-chain incident replay built with **Tiger Data / TimescaleDB, Three.js and React**. Explore six warehouse zones, follow an excursion from the loading dock into a dispatch buffer, and compare the latest temperature with accumulated _thermal debt_.
+Frostline follows a shift at **Nori Works**, a fictional sushi manufacturing facility in Zagreb. Built with **Tiger Data / TimescaleDB, Three.js and React**, it brings refrigerated fish storage, ingredient preparation, maki and nigiri assembly, and chilled packing into one interactive production floor. A packing-chiller interruption and a longer excursion on the maki line show how current temperature and accumulated _thermal debt_ tell different parts of the shift story.
 
-The warehouse and sensor data are fictional. The database schema, hypertable, continuous aggregate, SQL export and MCP integration are real. The checked-in replay snapshot makes the app work without a Tiger account or any browser-visible credentials.
+The facility and sensor readings are synthetic. The database schema, hypertable, continuous aggregate, SQL export and MCP integration are real. The checked-in Tiger snapshot makes the app work without a Tiger account or browser-visible credentials.
+
+| Zone | Production stage | Equipment and product                            |
+| ---- | ---------------- | ------------------------------------------------ |
+| A1   | Fish store       | Refrigerated cabinets, salmon and tuna trays     |
+| A2   | Vegetable prep   | Stainless benches, cucumber and avocado          |
+| B1   | Fish preparation | Cutting boards and portioned salmon              |
+| B2   | Maki assembly    | Rolling benches and a maki conveyor              |
+| C1   | Nigiri assembly  | Trays of salmon nigiri                           |
+| C2   | Packing line     | Sushi trays, a tray sealer and a packing chiller |
 
 ## Try it in a minute
 
@@ -17,13 +26,13 @@ npm run dev
 
 Open the local URL printed by the server (normally http://localhost:3000).
 
-1. Select **B2 / Dispatch buffer** and inspect its temperature and thermal debt.
-2. Click **Dock door opens** and play the incident. The loading dock warms first; the buffer follows.
-3. Click **See the aftermath**. Every zone cools down, but the exposure remains visible in the thermal debt view.
+1. Select **B2 / Maki assembly** and inspect its temperature and thermal debt.
+2. Click **Packing chiller pauses** and play the incident. Packing warms first; the maki line follows.
+3. Click **Shift totals**. Every zone cools down, with the exposure recorded in the thermal debt view.
 4. Select **C1** and scrub to around **08:25 UTC** to see a deliberate telemetry gap. Missing data is visibly unknown and excluded from exposure calculations.
 5. Export the selected zone's history as CSV, limited to the current replay position.
 
-Drag the warehouse to orbit, use the zoom buttons, and reset the camera at any time. Every zone also has a keyboard-accessible button. If WebGL is unavailable, the chart, replay, zone controls and metrics remain usable. Playback starts only on request; the 3D scene renders on changes rather than running a permanent animation loop.
+Drag the production floor to orbit, use the zoom buttons, and reset the camera at any time. Each zone has distinct procedural equipment, recognizable ingredients and finished sushi, plus a keyboard-accessible button. If WebGL is unavailable, the chart, replay, zone controls and metrics remain usable. Playback starts only on request; the 3D scene renders on changes rather than running a permanent animation loop.
 
 ## Why thermal debt?
 
@@ -37,7 +46,7 @@ thermal debt = Σ max(zone mean temperature − 5 °C, 0) × 5 minutes
 
 Ten minutes at 7 °C adds **20 °C·min**. Cooling does not erase that history. Only buckets up to the selected replay time count. Buckets with fewer than four sensor readings remain unknown; the demo does not interpolate or carry readings across gaps. The right panel reports unobserved time.
 
-This is an illustrative operational exposure measure, **not a food-safety model, shelf-life estimate, or validated spoilage prediction**. The 2–5 °C target and color thresholds are demo choices, not universal product limits. Zone means can hide individual sensor peaks. Production systems should use product-specific limits, validated sampling and models, independent sensor identities, calibration and explicit data-quality rules.
+The replay uses a 2–5 °C target for its six chilled stages. Thermal debt is an area-under-the-curve calculation over zone averages; the database also retains peak sensor temperatures in the rollup.
 
 ## The Tiger Data workflow
 
@@ -47,7 +56,7 @@ flowchart LR
     H --> A[Five-minute continuous aggregate]
     A --> Q[Bounded replay + thermal-debt SQL]
     Q --> J[Verified JSON snapshot]
-    J --> V[Three.js warehouse + incident replay]
+    J --> V[Three.js sushi facility + shift replay]
     M[Tiger MCP in Codex] --> H
 ```
 
@@ -92,7 +101,7 @@ npm run data:sync:mcp
 
 These use Tiger CLI's saved password and connection defaults. On newly provisioned services, Tiger may initially present a bootstrap certificate before installing its publicly signed certificate. The direct PostgreSQL scripts deliberately require certificate verification and may need to wait for that provisioning step; the MCP path uses Tiger's standard encrypted connection. See [Tiger's SSL documentation](https://docs.timescale.com/use-timescale/latest/security/strict-ssl/).
 
-The seed creates only the `frostline` schema and project resources; it does not drop existing tables. Run it twice to verify idempotency. It inserts **6,892** synthetic readings for 4 September 2026, with a 25-minute outage in C1, then refreshes the historical aggregate explicitly. The raw readings average into 1,728 time/zone slots, including five empty slots. Data is fixed and reproducible.
+The seed creates the `frostline` schema and project resources. Repeated runs update zone names and product descriptions while preserving existing readings. It inserts **6,892** synthetic readings for 4 September 2026, with a 25-minute outage in C1, then refreshes the historical aggregate explicitly. The raw readings average into 1,728 time/zone slots, including five empty slots. Data is fixed and reproducible.
 
 Without a database, generate the same offline dataset:
 
@@ -121,6 +130,7 @@ This initializes the actual stdio MCP server and verifies that `db_execute_query
 | ---------------------------------- | -------------------------------------------------------------- |
 | `app/page.tsx`                     | Shared replay state, controls, zone details, CSV export        |
 | `components/warehouse.tsx`         | Orthographic Three.js scene, picking, orbit controls, disposal |
+| `lib/facility-scene.ts`            | Shared geometry kit for prep benches, equipment and sushi      |
 | `components/temperature-chart.tsx` | SVG temperature history with explicit gaps                     |
 | `lib/telemetry.ts`                 | Deterministic fixture and tested exposure calculation          |
 | `db/001_schema.sql`                | Hypertable, continuous aggregate and Hypercore policy          |

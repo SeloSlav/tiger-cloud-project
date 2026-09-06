@@ -33,7 +33,7 @@
   --background: #0b1013;
   --foreground: #e9efee;
   --card: #10181c;
-  --primary: #c2f878;
+  --primary: #c4e990;
   --muted: #1c272b;
   --muted-foreground: #a0afb4;
   --border: #263237;
@@ -741,7 +741,8 @@ h2 {
   border-radius: 5px;
   background: #102128;
   padding: 10px 11px;
-  display: flex;
+  display: grid;
+  grid-template-columns: 5px 1fr auto;
   align-items: center;
   gap: 7px;
   text-align: left;
@@ -771,6 +772,20 @@ h2 {
 }
 .zone-selector strong small {
   font-size: 12px;
+}
+.zone-button-name {
+  grid-column: 1 / -1;
+  font-size: 12px;
+  line-height: 1.35;
+  min-height: 2.7em;
+  color: #b3c5c1;
+}
+.zone-button-code {
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 12px;
+}
+.zone-selector button[aria-pressed='true'] .zone-button-name {
+  color: #e1edd1;
 }
 .unknown {
   background: #77858f;
@@ -1108,7 +1123,7 @@ h2 {
     max-width: 450px;
   }
   .zone-selector {
-    grid-template-columns: repeat(6, 1fr);
+    grid-template-columns: repeat(3, 1fr);
     padding-top: 10px;
   }
   .replay-actions {

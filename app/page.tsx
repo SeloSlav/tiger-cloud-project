@@ -88,19 +88,12 @@ export default function Home() {
   };
   useEffect(() => {
     if (!playing) return;
-    const timer = window.setInterval(
-      () =>
-        setIndex((i) => {
-          if (i >= 287) {
-            setPlaying(false);
-            return 287;
-          }
-          return i + 1;
-        }),
-      130,
-    );
-    return () => window.clearInterval(timer);
-  }, [playing]);
+    const timer = window.setTimeout(() => {
+      if (index >= 286) setPlaying(false);
+      setIndex(Math.min(index + 1, 287));
+    }, 130);
+    return () => window.clearTimeout(timer);
+  }, [playing, index]);
   useEffect(() => {
     const context = (document as ModelDocument).modelContext;
     if (!context?.registerTool) return;
@@ -128,7 +121,7 @@ export default function Home() {
       {
         name: 'set_frostline_replay',
         description:
-          'Set the visible warehouse zone, replay bucket (0–287), and temperature or debt view. Pauses playback. Changes local page state only.',
+          'Set the visible sushi production zone, replay bucket (0–287), and temperature or debt view. Pauses playback. Changes local page state only.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -230,16 +223,16 @@ export default function Home() {
       <section className="page-heading">
         <div>
           <p className="eyebrow">
-            COLD-CHAIN INTELLIGENCE <span>/</span> FACILITY 01
+            SUSHI PRODUCTION <span>/</span> FACILITY 01
           </p>
-          <h1>Keep your cool.</h1>
+          <h1>Crafted cold.</h1>
           <p className="subtitle">
-            A clearer view of what your temperature data is telling you.
+            From salmon prep to the final tray. Every zone, one view.
           </p>
         </div>
         <div className="facility">
           <span className="status-dot" />
-          North Dock · Zagreb
+          Nori Works · Zagreb
           <small>
             04 SEP 2026 <span>REPLAY / UTC</span>
           </small>
@@ -263,8 +256,8 @@ export default function Home() {
             value: String(above).padStart(2, '0'),
             unit: '/ 06',
             note: above
-              ? 'Select a warm zone to investigate'
-              : 'All reporting zones below the upper limit',
+              ? `${above} of 6 production zones above 5 °C`
+              : 'All reporting zones at or below 5 °C',
           },
           {
             icon: Clock3,
@@ -298,13 +291,13 @@ export default function Home() {
         <section className="map-panel">
           <div className="panel-heading">
             <div>
-              <p className="eyebrow">THE BIG PICTURE</p>
-              <h2>Your warehouse, in context.</h2>
+              <p className="eyebrow">THE PRODUCTION FLOOR</p>
+              <h2>Six zones. One continuous craft.</h2>
             </div>
             <Tabs value={metric} onValueChange={(v) => setMetric(v as Metric)}>
               <TabsList
                 className="metric-tabs"
-                aria-label="Warehouse color metric"
+                aria-label="Facility color metric"
               >
                 <TabsTrigger value="temperature">Temperature</TabsTrigger>
                 <TabsTrigger value="debt">Thermal debt</TabsTrigger>
@@ -314,7 +307,7 @@ export default function Home() {
           <Suspense
             fallback={
               <div className="warehouse-loading">
-                Preparing the warehouse view…
+                Preparing the production floor…
               </div>
             }
           >
@@ -325,7 +318,7 @@ export default function Home() {
               onSelect={setSelected}
             />
           </Suspense>
-          <div className="zone-selector" aria-label="Select warehouse zone">
+          <div className="zone-selector" aria-label="Select production zone">
             {summaries.map((z) => (
               <button
                 key={z.id}
@@ -338,7 +331,7 @@ export default function Home() {
                     background: colorFor(z.temperature, z.debt, metric),
                   }}
                 />
-                <span>{z.id}</span>
+                <span className="zone-button-code">{z.id}</span>
                 <strong>
                   {z.temperature === null
                     ? '—'
@@ -347,6 +340,7 @@ export default function Home() {
                       : z.temperature.toFixed(1)}
                   <small>{metric === 'debt' ? '' : '°'}</small>
                 </strong>
+                <span className="zone-button-name">{z.name}</span>
               </button>
             ))}
           </div>
@@ -357,7 +351,7 @@ export default function Home() {
             </span>
             <span>
               <i className="legend-dot amber" />
-              {metric === 'debt' ? '1–150 °C·min' : '5–7 °C'}
+              {metric === 'debt' ? '> 0–150 °C·min' : '> 5–7 °C'}
             </span>
             <span>
               <i className="legend-dot hot" />
@@ -418,34 +412,33 @@ export default function Home() {
             </div>
           </dl>
           <div className="insight-rule" />
-          <p className="eyebrow">THE SIGNAL BEHIND THE NUMBER</p>
+          <p className="eyebrow">LINE STATUS</p>
           <h3>
-            {current.debt > 0 &&
-            current.temperature !== null &&
-            current.temperature <= 5 ? (
-              <>
-                Back in range.
-                <br />
-                The exposure remains.
-              </>
-            ) : (
-              <>
-                Temperature recovers.
-                <br />
-                Exposure adds up.
-              </>
-            )}
+            {current.temperature === null
+              ? 'Awaiting sensor readings.'
+              : current.temperature > 5
+                ? 'Temperature excursion.'
+                : current.temperature < 2
+                  ? 'Below temperature target.'
+                  : current.debt > 0
+                    ? 'Cooling recovered.'
+                    : 'Holding steady.'}
           </h3>
           <p className="explanation">
-            Thermal debt combines how warm a zone gets with how long it stays
-            warm. Compare zones before a normal reading hides an excursion.
+            {current.temperature === null
+              ? `${current.name} has ${current.sensors} of 4 sensors reporting in this interval.`
+              : current.debt > 0
+                ? `${current.name} has recorded ${current.aboveMinutes} minutes above 5 °C this shift, with a peak of ${current.peak?.toFixed(1)} °C.`
+                : `${current.name} has recorded ${current.observedMinutes} minutes at or below 5 °C this shift.`}
           </p>
           <div className="insight-note">
             <Clock3 size={19} />
             <p>
-              {current.unknownMinutes
-                ? 'Sensor gaps are excluded. Total exposure may be higher.'
-                : 'An operational signal, not a product safety or shelf-life prediction.'}
+              {current.sensors} / 4 sensors reporting
+              <br />
+              <span>
+                Interval ending {time} UTC · {current.cargo}
+              </span>
             </p>
           </div>
         </aside>
@@ -456,8 +449,8 @@ export default function Home() {
       >
         <div className="replay-heading">
           <div>
-            <p className="eyebrow">EVERY EXCURSION HAS A STORY</p>
-            <h2>Rewind. Follow the heat.</h2>
+            <p className="eyebrow">SHIFT ARCHIVE / 04 SEP 2026</p>
+            <h2>A day on the line.</h2>
             <p className="replay-description">
               {current.name} · zone {selected} · mean temperature per 5-minute
               bucket
@@ -519,7 +512,7 @@ export default function Home() {
               setMetric('debt');
             }}
           >
-            See the aftermath <ArrowRight size={15} />
+            Shift totals <ArrowRight size={15} />
           </button>
         </div>
         <div className="event-list">
@@ -558,10 +551,10 @@ export default function Home() {
               About this data
             </DialogTrigger>
             <DialogContent className="data-dialog">
-              <DialogTitle>Small demo. Real time-series workflow.</DialogTitle>
+              <DialogTitle>Nori Works · shift archive</DialogTitle>
               <DialogDescription>
-                The warehouse, products and incident are fictional. This is a
-                fixed historical replay, not a live operational dashboard.
+                Synthetic production telemetry from a fictional sushi facility
+                in Zagreb, backed by a Tiger Data snapshot.
               </DialogDescription>
               <div className="data-details">
                 <p>
@@ -583,14 +576,9 @@ export default function Home() {
                   <strong>
                     Thermal debt = Σ max(mean °C − 5, 0) × 5 minutes.
                   </strong>{' '}
-                  Only completed buckets with all four sensors count. Missing
-                  buckets stay unknown; they are not filled with zeroes.
-                </p>
-                <p>
-                  The 2–5 °C target and debt colors are illustrative operating
-                  thresholds. This metric does not estimate spoilage, shelf life
-                  or product safety. Zone means can hide individual sensor
-                  peaks.
+                  Calculated from completed intervals with four sensor readings.
+                  The archive includes a 25-minute sensor gap in nigiri
+                  assembly.
                 </p>
                 <p className="snapshot-stamp">
                   Snapshot exported{' '}

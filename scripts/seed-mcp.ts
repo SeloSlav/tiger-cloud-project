@@ -8,7 +8,7 @@ try {
     await readFile(new URL('../db/001_schema.sql', import.meta.url), 'utf8'),
   );
   await db.query(
-    `INSERT INTO frostline.zones(id,name,cargo) VALUES ${ZONES.map((z) => `(${literal(z.id)},${literal(z.name)},${literal(z.cargo)})`).join(',')} ON CONFLICT(id) DO NOTHING`,
+    `INSERT INTO frostline.zones(id,name,cargo) VALUES ${ZONES.map((z) => `(${literal(z.id)},${literal(z.name)},${literal(z.cargo)})`).join(',')} ON CONFLICT(id) DO UPDATE SET name=EXCLUDED.name, cargo=EXCLUDED.cargo`,
   );
   const rows = makeReadings();
   // Controlled synthetic values only; schema and user input are not interpolated.

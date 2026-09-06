@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RotateCcw, Minus, Plus } from 'lucide-react';
 import { ZONES, colorFor, type Metric, type ZoneId } from '@/lib/telemetry';
+import { createFacilityKit } from '@/lib/facility-scene';
 
 export type ZoneState = {
   id: ZoneId;
@@ -48,7 +49,7 @@ export default function Warehouse(props: Props) {
     renderer.toneMappingExposure = 1.3;
     renderer.domElement.setAttribute(
       'aria-label',
-      'Interactive warehouse schematic. Use the zone buttons below to select a zone with the keyboard.',
+      'Nori Works sushi production facility: fish storage, vegetable and fish preparation, maki and nigiri assembly, and packing. Keyboard zone controls below.',
     );
     renderer.domElement.setAttribute('role', 'img');
     container.appendChild(renderer.domElement);
@@ -77,6 +78,7 @@ export default function Warehouse(props: Props) {
     const geometries: THREE.BufferGeometry[] = [];
     const materials: THREE.Material[] = [];
     const textures: THREE.Texture[] = [];
+    const facility = createFacilityKit();
     const boxGeo = new THREE.BoxGeometry(1, 1, 1);
     geometries.push(boxGeo);
     const material = (color: string, metalness = 0.15) => {
@@ -91,8 +93,8 @@ export default function Warehouse(props: Props) {
     const floor = material('#233138');
     const wall = material('#485d61');
     const steel = material('#69837f', 0.45);
-    const pallet = material('#6b7966');
-    const packages = material('#88988b');
+    const grout = material('#35454b');
+    const markings = material('#92a29a');
     function box(
       group: THREE.Object3D,
       x: number,
@@ -114,34 +116,14 @@ export default function Warehouse(props: Props) {
     box(scene, 0, 0.65, -8.35, 23, 1.3, 0.2, wall);
     box(scene, -11.35, 0.65, 0, 0.2, 1.3, 17, wall);
     for (let x = -10; x < 11; x += 2)
-      box(scene, x, 0.01, 0, 0.018, 0.015, 16, material('#35454b'));
+      box(scene, x, 0.01, 0, 0.018, 0.015, 16, grout);
     for (let z = -7; z < 8; z += 2)
-      box(scene, 0, 0.01, z, 22, 0.015, 0.018, material('#35454b'));
-    // Loading bays and floor markings give the heat source a physical location.
-    for (let n = 0; n < 3; n++) {
-      box(
-        scene,
-        5.15 + n * 0.85,
-        0.025,
-        7.8,
-        0.45,
-        0.025,
-        0.9,
-        material('#b3b978'),
-      );
-      box(scene, 5.15 + n * 0.85, 0.14, 8.4, 0.6, 0.25, 0.35, steel);
-    }
+      box(scene, 0, 0.01, z, 22, 0.015, 0.018, grout);
+    // Low service wall and pipework frame the industrial production floor.
+    box(scene, 0, 0.38, 8.3, 23, 0.65, 0.16, wall);
+    box(scene, 0, 1.43, -8.25, 22, 0.08, 0.08, steel);
     for (let n = 0; n < 11; n++)
-      box(
-        scene,
-        -9.5 + n * 1.9,
-        0.025,
-        0,
-        0.75,
-        0.02,
-        0.055,
-        material('#92a29a'),
-      );
+      box(scene, -9.5 + n * 1.9, 0.025, 0, 0.75, 0.02, 0.055, markings);
     const picks: THREE.Object3D[] = [];
     const groups = ZONES.map((zone) => {
       const group = new THREE.Group();
@@ -155,9 +137,9 @@ export default function Warehouse(props: Props) {
       tint.emissiveIntensity = 0.12;
       const plate = box(group, 0, 0.04, 0, 5.3, 0.1, 5.5, tint);
       picks.push(plate);
-      const edgeGeo = new THREE.EdgesGeometry(
-        new THREE.BoxGeometry(5.35, 0.12, 5.55),
-      );
+      const edgeBox = new THREE.BoxGeometry(5.35, 0.12, 5.55);
+      const edgeGeo = new THREE.EdgesGeometry(edgeBox);
+      edgeBox.dispose();
       geometries.push(edgeGeo);
       const edgeMat = new THREE.LineBasicMaterial({
         color: '#73cbb9',
@@ -168,29 +150,9 @@ export default function Warehouse(props: Props) {
       const edge = new THREE.LineSegments(edgeGeo, edgeMat);
       edge.position.y = 0.12;
       group.add(edge);
-      const rackTint = material('#659f93');
-      rackTint.emissiveIntensity = 0.08;
-      for (const row of [-1.3, 1.3]) {
-        for (const x of [-2.1, 0, 2.1])
-          for (const z of [-0.51, 0.51])
-            box(group, x, 1.35, row + z, 0.075, 2.65, 0.075, steel);
-        for (const y of [0.25, 1.22, 2.19]) {
-          box(group, 0, y, row, 4.3, 0.1, 1.17, rackTint);
-          for (let c = 0; c < 4; c++) {
-            box(group, -1.65 + c * 1.1, y + 0.13, row, 0.85, 0.12, 0.9, pallet);
-            box(
-              group,
-              -1.65 + c * 1.1,
-              y + 0.5,
-              row,
-              0.78,
-              0.62,
-              0.8,
-              packages,
-            );
-          }
-        }
-      }
+      const equipmentTint = material('#659f93');
+      equipmentTint.emissiveIntensity = 0.08;
+      group.add(facility.buildZone(zone.id, equipmentTint));
       const sensorMat = material('#c8f2c2');
       sensorMat.emissive.set('#c8f2c2');
       sensorMat.emissiveIntensity = 0.5;
@@ -199,7 +161,7 @@ export default function Warehouse(props: Props) {
           box(group, x, 0.22, z, 0.13, 0.2, 0.13, sensorMat);
       const canvas = document.createElement('canvas');
       canvas.width = 384;
-      canvas.height = 152;
+      canvas.height = 176;
       const texture = new THREE.CanvasTexture(canvas);
       textures.push(texture);
       const spriteMat = new THREE.SpriteMaterial({
@@ -209,12 +171,22 @@ export default function Warehouse(props: Props) {
       });
       materials.push(spriteMat);
       const label = new THREE.Sprite(spriteMat);
-      label.position.set(0, 4, 0);
-      label.scale.set(4.6, 1.82, 1);
+      label.position.set(0, 4.1, 0);
+      label.scale.set(4.6, 2.1, 1);
       label.renderOrder = 5;
       group.add(label);
-      picks.push(...group.children.filter((c) => c instanceof THREE.Mesh));
-      return { id: zone.id, tint, rackTint, edgeMat, canvas, texture };
+      group.traverse((child) => {
+        if (child instanceof THREE.Mesh && child !== plate) picks.push(child);
+      });
+      return {
+        id: zone.id,
+        name: zone.name,
+        tint,
+        equipmentTint,
+        edgeMat,
+        canvas,
+        texture,
+      };
     });
     let disposed = false;
     const render = () => {
@@ -232,28 +204,28 @@ export default function Warehouse(props: Props) {
         zone.tint.color.set(color);
         zone.tint.emissive.set(color);
         zone.tint.opacity = selected ? 0.5 : 0.24;
-        zone.rackTint.color.set(color);
-        zone.rackTint.emissive.set(color);
+        zone.equipmentTint.color.set(color);
+        zone.equipmentTint.emissive.set(color);
         zone.edgeMat.color.set(selected ? '#dcf7b2' : color);
         zone.edgeMat.opacity = selected ? 1 : 0.6;
         const ctx = zone.canvas.getContext('2d')!;
-        ctx.clearRect(0, 0, 384, 152);
+        ctx.clearRect(0, 0, 384, 176);
         ctx.fillStyle = selected ? '#243d36' : '#102128';
         ctx.beginPath();
-        ctx.roundRect(5, 5, 374, 140, 12);
+        ctx.roundRect(5, 5, 374, 164, 12);
         ctx.fill();
         ctx.strokeStyle = selected ? '#c2f878' : '#49646a';
         ctx.lineWidth = 2;
         ctx.stroke();
         ctx.fillStyle = selected ? '#c2f878' : '#b4c5c9';
-        ctx.font = '500 29px Arial';
-        ctx.fillText(zone.id, 23, 49);
+        ctx.font = '500 23px Arial';
+        ctx.fillText(`${zone.id} / ${zone.name}`, 23, 46, 310);
         ctx.fillStyle = color;
         ctx.beginPath();
         ctx.arc(350, 39, 6, 0, Math.PI * 2);
         ctx.fill();
         ctx.fillStyle = '#eef4ef';
-        ctx.font = '500 41px Arial';
+        ctx.font = '500 43px Arial';
         ctx.fillText(
           data.temperature === null
             ? 'No data'
@@ -261,7 +233,16 @@ export default function Warehouse(props: Props) {
               ? `${Math.round(data.debt)} °C·min`
               : `${data.temperature.toFixed(1)} °C`,
           23,
-          111,
+          109,
+        );
+        ctx.font = '400 19px Arial';
+        ctx.fillStyle = '#92aaa6';
+        ctx.fillText(
+          live.current.metric === 'debt'
+            ? 'SHIFT EXPOSURE'
+            : 'ZONE TEMPERATURE',
+          23,
+          145,
         );
         zone.texture.needsUpdate = true;
       }
@@ -341,6 +322,7 @@ export default function Warehouse(props: Props) {
       geometries.forEach((g) => g.dispose());
       materials.forEach((m) => m.dispose());
       textures.forEach((t) => t.dispose());
+      facility.dispose();
       renderer.dispose();
       renderer.domElement.remove();
       update.current = () => {};
@@ -363,7 +345,7 @@ export default function Warehouse(props: Props) {
       ) : (
         <>
           <span className="map-caption">
-            NORTH DOCK <span>/</span> LEVEL 01
+            NORI WORKS <span>/</span> PRODUCTION FLOOR
           </span>
           <div className="camera-buttons">
             <button
@@ -380,7 +362,7 @@ export default function Warehouse(props: Props) {
             </button>
             <button
               onClick={() => cameraAction.current('reset')}
-              aria-label="Reset warehouse view"
+              aria-label="Reset facility view"
             >
               <RotateCcw size={16} />
             </button>

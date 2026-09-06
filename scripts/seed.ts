@@ -10,7 +10,7 @@ try {
   await client.query('BEGIN');
   for (const zone of ZONES)
     await client.query(
-      'INSERT INTO frostline.zones(id,name,cargo) VALUES($1,$2,$3) ON CONFLICT(id) DO NOTHING',
+      'INSERT INTO frostline.zones(id,name,cargo) VALUES($1,$2,$3) ON CONFLICT(id) DO UPDATE SET name=EXCLUDED.name, cargo=EXCLUDED.cargo',
       [zone.id, zone.name, zone.cargo],
     );
   const rows = makeReadings();

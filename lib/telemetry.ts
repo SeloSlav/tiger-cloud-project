@@ -1,22 +1,40 @@
 export const ZONES = [
-  { id: 'A1', name: 'Produce west', cargo: 'Leafy greens', x: -6.2, z: -3.5 },
-  { id: 'A2', name: 'Produce east', cargo: 'Fresh produce', x: -6.2, z: 3.5 },
-  { id: 'B1', name: 'Dairy reserve', cargo: 'Cultured dairy', x: 0, z: -3.5 },
+  { id: 'A1', name: 'Fish store', cargo: 'Salmon & tuna', x: -6.2, z: -3.5 },
+  {
+    id: 'A2',
+    name: 'Vegetable prep',
+    cargo: 'Cucumber & avocado',
+    x: -6.2,
+    z: 3.5,
+  },
+  {
+    id: 'B1',
+    name: 'Fish preparation',
+    cargo: 'Portioned salmon',
+    x: 0,
+    z: -3.5,
+  },
   {
     id: 'B2',
-    name: 'Dispatch buffer',
-    cargo: 'Mixed chilled goods',
+    name: 'Maki assembly',
+    cargo: 'Salmon-avocado rolls',
     x: 0,
     z: 3.5,
   },
   {
     id: 'C1',
-    name: 'Chilled reserve',
-    cargo: 'Packaged ingredients',
+    name: 'Nigiri assembly',
+    cargo: 'Salmon nigiri',
     x: 6.2,
     z: -3.5,
   },
-  { id: 'C2', name: 'Loading dock', cargo: 'Outbound pallets', x: 6.2, z: 3.5 },
+  {
+    id: 'C2',
+    name: 'Packing line',
+    cargo: 'Chilled sushi trays',
+    x: 6.2,
+    z: 3.5,
+  },
 ] as const;
 export type ZoneId = (typeof ZONES)[number]['id'];
 export type Metric = 'temperature' | 'debt';
@@ -42,22 +60,22 @@ export const EVENTS = [
   {
     index: 192,
     time: '16:00',
-    title: 'Dock door opens',
-    detail: 'C2 starts warming. The dispatch buffer follows.',
+    title: 'Packing chiller pauses',
+    detail: 'The packing line begins its temperature excursion.',
     zone: 'C2' as ZoneId,
   },
   {
     index: 213,
     time: '17:45',
-    title: 'Heat reaches the buffer',
-    detail: 'B2 remains warm after the loading dock begins recovering.',
+    title: 'Maki line warms',
+    detail: 'Assembly remains warm as the packing line recovers.',
     zone: 'B2' as ZoneId,
   },
   {
-    index: 237,
-    time: '19:45',
+    index: 248,
+    time: '20:40',
     title: 'Cooling restored',
-    detail: 'Readings recover. Accumulated thermal debt remains.',
+    detail: 'Both lines return to range. The shift exposure is recorded.',
     zone: 'B2' as ZoneId,
   },
 ];
@@ -165,7 +183,8 @@ export function colorFor(
   return '#73cbb9';
 }
 export function timeLabel(time: string, end = false) {
-  return new Date(Date.parse(time) + (end ? INTERVAL * 60000 : 0))
+  const label = new Date(Date.parse(time) + (end ? INTERVAL * 60000 : 0))
     .toISOString()
     .slice(11, 16);
+  return end && label === '00:00' ? '24:00' : label;
 }

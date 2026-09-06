@@ -17,7 +17,7 @@ export function TemperatureChart({
     top = 15,
     bottom = 27;
   const x = (i: number) =>
-    left + (i / (points.length - 1)) * (width - left - right);
+    left + ((i + 1) / points.length) * (width - left - right);
   const y = (v: number) => top + ((10 - v) / 10) * (height - top - bottom);
   const paths: string[] = [];
   let path = '';
@@ -75,14 +75,14 @@ export function TemperatureChart({
       >
         5 °C upper limit
       </text>
-      {[0, 48, 96, 144, 192, 240, 287].map((i) => (
+      {[0, 4, 8, 12, 16, 20, 24].map((hour) => (
         <text
-          key={i}
-          x={x(i)}
+          key={hour}
+          x={left + (hour / 24) * (width - left - right)}
           y={height - 5}
-          textAnchor={i === 0 ? 'start' : i === 287 ? 'end' : 'middle'}
+          textAnchor={hour === 0 ? 'start' : hour === 24 ? 'end' : 'middle'}
         >
-          {timeLabel(points[i].time, i === 287)}
+          {String(hour).padStart(2, '0')}:00
         </text>
       ))}
       {paths.map((d, i) => (
