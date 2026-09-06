@@ -8,10 +8,12 @@ import {
   cameraEase,
 } from '../lib/facility-camera';
 import {
-  DELIVERY_ROUTES,
-  deliveryCycle,
-  routeLength,
-  sampleDelivery,
+  PRODUCTION,
+  WORKER_HOME,
+  DOCKS,
+  sampleWorker,
+  sampleObject,
+  MOTION,
 } from '../lib/factory-motion';
 import { createFacilityKit } from '../lib/facility-scene';
 import { createFactoryActivity } from '../lib/factory-activity';
@@ -61,43 +63,63 @@ void test('every focused zone fits in portrait, narrow and wide camera frames', 
   assert.equal(cameraEase(0.5), 0.5);
 });
 
-void test('deliveries pick up cargo, put it down, and return empty', () => {
-  for (const route of DELIVERY_ROUTES) {
-    const sample = (time: number) => sampleDelivery(route, time - route.offset);
-    const travel = routeLength(route) / route.speed;
-    assert.equal(sample(route.dwell * 0.25).carrying, false);
-    assert.equal(sample(route.dwell * 0.75).carrying, true);
-    assert.equal(sample(route.dwell + travel * 0.5).phase, 'deliver');
-    assert.equal(sample(route.dwell + travel * 0.5).carrying, true);
-    assert.equal(sample(route.dwell * 1.75 + travel).carrying, false);
-    assert.equal(sample(2 * route.dwell + travel * 1.5).phase, 'return');
-    assert.equal(sample(2 * route.dwell + travel * 1.5).carrying, false);
-    assert.deepEqual(
-      sampleDelivery(route, 0),
-      sampleDelivery(route, deliveryCycle(route)),
-    );
+void test('production waits for inputs and processes both recipes before packing', () => {
+  const { actions, milestones: m } = PRODUCTION;
+  assert.ok(m.mReady > m.mDelivered && m.nReady > m.nDelivered);
+  for (const a of actions) {
+    if (a.worker === 'maki')
+      assert.ok(a.start >= Math.max(m.mReady, m.vegetablesReady));
+    if (a.worker === 'nigiri') assert.ok(a.start >= m.nReady);
+    if (a.worker === 'packing' && a.object === 'maki-tray')
+      assert.ok(a.start >= m.mPacked);
+    if (a.worker === 'packing' && a.object === 'nigiri-tray')
+      assert.ok(a.start >= m.nPacked);
+  }
+  assert.ok(m.mPacked > m.mAssembled && m.nPacked > m.nAssembled);
+  for (const worker of Object.keys(WORKER_HOME)) {
+    const jobs = actions.filter((a) => a.worker === worker);
+    for (let i = 1; i < jobs.length; i++)
+      assert.ok(jobs[i].start >= jobs[i - 1].end - 1e-8);
+  }
+  for (const object of Object.keys(PRODUCTION.initial)) {
+    const handlers = actions.filter((a) => a.object === object);
+    for (let i = 1; i < handlers.length; i++)
+      assert.ok(
+        handlers[i].start >= handlers[i - 1].end - 1e-8,
+        `${object} has two owners`,
+      );
   }
 });
 
-void test('delivery movement is continuous through corners and cycle boundaries', () => {
-  for (const route of DELIVERY_ROUTES) {
-    const dt = 1 / 60;
-    let previous = sampleDelivery(route, 0);
-    for (let t = dt; t < deliveryCycle(route) * 2; t += dt) {
-      const next = sampleDelivery(route, t);
-      const distance = Math.hypot(next.x - previous.x, next.z - previous.z);
+void test('workers and handled objects stay continuous through every action boundary', () => {
+  const dt = 1e-5;
+  for (const action of PRODUCTION.actions) {
+    for (const t of [action.start, action.end]) {
+      const before = sampleWorker(action.worker, Math.max(0, t - dt));
+      const after = sampleWorker(action.worker, t + dt);
       assert.ok(
-        distance <= route.speed * dt + 1e-8,
-        `${route.name} has a position jump`,
+        new THREE.Vector3(...before.position).distanceTo(
+          new THREE.Vector3(...after.position),
+        ) <
+          MOTION.speed * dt * 2 + 1e-6,
       );
-      previous = next;
+      if (action.object) {
+        const a = sampleObject(action.object, Math.max(0, t - dt));
+        const b = sampleObject(action.object, t + dt);
+        assert.ok(
+          new THREE.Vector3(...a.position).distanceTo(
+            new THREE.Vector3(...b.position),
+          ) < 0.001,
+          `${action.object} jumps at ${t}: ${action.label}`,
+        );
+      }
     }
   }
 });
 
-void test('delivery paths keep worker bodies clear of factory equipment', () => {
-  const kit = createFacilityKit();
-  const accent = new THREE.MeshStandardMaterial();
+void test('delivery paths keep worker bodies clear of equipment', () => {
+  const kit = createFacilityKit(),
+    accent = new THREE.MeshStandardMaterial();
   const obstacles: THREE.Box3[] = [];
   for (const zone of ZONES) {
     const group = kit.buildZone(zone.id, accent);
@@ -106,18 +128,20 @@ void test('delivery paths keep worker bodies clear of factory equipment', () => 
     group.traverse((object) => {
       if (!(object instanceof THREE.Mesh)) return;
       const box = new THREE.Box3().setFromObject(object);
-      if (box.min.y < 0.9 && box.max.y > 0.2) obstacles.push(box);
+      if (box.min.y < 1.15 && box.max.y > 0.2) obstacles.push(box);
     });
   }
-  for (const route of DELIVERY_ROUTES) {
-    for (let t = 0; t < deliveryCycle(route); t += 0.1) {
-      const state = sampleDelivery(route, t);
+  for (const action of PRODUCTION.actions.filter((a) => a.kind === 'walk')) {
+    for (let t = action.start; t <= action.end; t += 0.05) {
+      const {
+        position: [x, , z],
+      } = sampleWorker(action.worker, t);
       for (const box of obstacles) {
-        const dx = Math.max(box.min.x - state.x, 0, state.x - box.max.x);
-        const dz = Math.max(box.min.z - state.z, 0, state.z - box.max.z);
+        const dx = Math.max(box.min.x - x, 0, x - box.max.x);
+        const dz = Math.max(box.min.z - z, 0, z - box.max.z);
         assert.ok(
           Math.hypot(dx, dz) > 0.22,
-          `${route.name} walks through equipment`,
+          `${action.worker} walks through equipment at ${t}: ${x}, ${z}`,
         );
       }
     }
@@ -126,27 +150,91 @@ void test('delivery paths keep worker bodies clear of factory equipment', () => 
   accent.dispose();
 });
 
-void test('animated rigs stay finite and share a bounded geometry budget', () => {
+void test('trays, recipe components and lids persist, attach without jumps, and finish in the chiller', () => {
   const activity = createFactoryActivity();
-  let count = 0;
+  const identities = [...activity.objects.values()];
   const geometries = new Set<THREE.BufferGeometry>();
-  activity.root.traverse((object) => {
-    if (object instanceof THREE.Mesh) {
-      count++;
-      geometries.add(object.geometry);
+  let meshes = 0;
+  activity.root.traverse((o) => {
+    if (o instanceof THREE.Mesh) {
+      geometries.add(o.geometry);
+      meshes++;
     }
   });
-  assert.ok(count < 250);
-  assert.ok(geometries.size <= 4);
-  for (let seconds = 0; seconds <= 100; seconds += 0.25) {
-    activity.update(seconds, 0.25);
-    activity.root.traverse((object) => {
+  assert.ok(meshes < 260 && geometries.size === 4);
+  const previous = new Map<string, THREE.Vector3>();
+  for (let t = 0; t < PRODUCTION.duration; t += 0.1) {
+    activity.update(t, 0.1);
+    for (const [id, object] of activity.objects) {
+      assert.equal(object.visible, true, `${id} disappeared`);
+      assert.ok(object.position.toArray().every(Number.isFinite));
+      if (previous.has(id))
+        assert.ok(
+          object.position.distanceTo(previous.get(id)!) < 0.6,
+          `${id} jumped at ${t}`,
+        );
+      previous.set(id, object.position.clone());
+    }
+  }
+  activity.update(PRODUCTION.duration);
+  assert.deepEqual([...activity.objects.values()], identities);
+  assert.deepEqual(activity.objects.get('maki-tray')!.position.toArray(), [
+    ...DOCKS.chilledMaki.position,
+  ]);
+  assert.deepEqual(activity.objects.get('nigiri-tray')!.position.toArray(), [
+    ...DOCKS.chilledNigiri.position,
+  ]);
+  const final = identities.map((o) => o.position.toArray());
+  activity.update(PRODUCTION.duration + 1000);
+  assert.deepEqual(
+    identities.map((o) => o.position.toArray()),
+    final,
+    'Finished stock must stay chilled until explicit replay',
+  );
+  activity.update(0);
+  assert.deepEqual(activity.objects.get('maki-tray')!.position.toArray(), [
+    ...DOCKS.rawMaki.position,
+  ]);
+  activity.dispose();
+});
+
+void test('loaded travel has the same object between the worker hands', () => {
+  const activity = createFactoryActivity();
+  for (const a of PRODUCTION.actions.filter(
+    (a) => a.kind === 'walk' && a.object,
+  )) {
+    activity.update((a.start + a.end) / 2);
+    activity.root.updateMatrixWorld(true);
+    const object = activity.objects.get(a.object!)!;
+    const worker = activity.root.getObjectByName(`worker-${a.worker}`)!;
+    assert.equal(object.userData.owner, a.worker);
+    assert.ok(object.position.distanceTo(worker.position) < 1.7);
+    for (const sign of [-1, 1]) {
+      const hand = activity.root.getObjectByName(`hand-${a.worker}-${sign}`)!;
+      const large = a.object!.endsWith('-tray') || a.object!.endsWith('-lid');
+      const handle = new THREE.Vector3(sign * (large ? 0.48 : 0.085), 0.025, 0)
+        .applyQuaternion(object.quaternion)
+        .add(object.position);
       assert.ok(
-        [...object.position.toArray(), ...object.quaternion.toArray()].every(
-          Number.isFinite,
-        ),
+        hand.getWorldPosition(new THREE.Vector3()).distanceTo(handle) < 1e-7,
+        'Gloves must touch the carried object',
       );
-    });
+    }
   }
   activity.dispose();
+});
+
+void test('walking workers leave room for colleagues waiting at benches', () => {
+  const ids = Object.keys(WORKER_HOME) as (keyof typeof WORKER_HOME)[];
+  for (let t = 0; t < PRODUCTION.duration; t += 0.1) {
+    for (let i = 0; i < ids.length; i++)
+      for (let j = i + 1; j < ids.length; j++) {
+        const a = sampleWorker(ids[i], t).position,
+          b = sampleWorker(ids[j], t).position;
+        assert.ok(
+          Math.hypot(a[0] - b[0], a[2] - b[2]) > 0.44,
+          `${ids[i]} collides with ${ids[j]} at ${t}`,
+        );
+      }
+  }
 });

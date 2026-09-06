@@ -2,7 +2,15 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { RotateCcw, Minus, Plus, Play, Pause, ArrowLeft } from 'lucide-react';
+import {
+  RotateCcw,
+  Minus,
+  Plus,
+  Play,
+  Pause,
+  ArrowLeft,
+  ListRestart,
+} from 'lucide-react';
 import { ZONES, colorFor, type Metric, type ZoneId } from '@/lib/telemetry';
 import { createFacilityKit } from '@/lib/facility-scene';
 import { createFactoryActivity } from '@/lib/factory-activity';
@@ -44,12 +52,15 @@ export default function Warehouse(props: Props) {
     serverMotionSnapshot,
   );
   const [motion, setMotion] = useState<'auto' | 'on' | 'off'>('auto');
+  const [productionComplete, setProductionComplete] = useState(false);
   const activityRunning =
-    motion === 'on' || (motion === 'auto' && !reducedMotion);
+    !productionComplete &&
+    (motion === 'on' || (motion === 'auto' && !reducedMotion));
   const host = useRef<HTMLDivElement>(null);
   const live = useRef({ ...props, activityRunning, reducedMotion });
   const update = useRef<() => void>(() => {});
   const cameraAction = useRef<(action: string) => void>(() => {});
+  const restartProduction = useRef<() => void>(() => {});
   const [failed, setFailed] = useState(false);
   useEffect(() => {
     live.current = { ...props, activityRunning, reducedMotion };
@@ -76,7 +87,7 @@ export default function Warehouse(props: Props) {
     renderer.toneMappingExposure = 1.3;
     renderer.domElement.setAttribute(
       'aria-label',
-      'Nori Works sushi production facility: fish storage, vegetable and fish preparation, maki and nigiri assembly, and packing. Keyboard zone controls below.',
+      'Nori Works sushi production facility. Workers pick up ingredients, carry trays from storage through preparation and assembly, then pack and chill the sushi. Keyboard zone controls below.',
     );
     renderer.domElement.setAttribute('role', 'img');
     renderer.domElement.tabIndex = 0;
@@ -109,9 +120,13 @@ export default function Warehouse(props: Props) {
     const facility = createFacilityKit();
     const activity = createFactoryActivity();
     scene.add(activity.root);
-    activity.debugRoutes.visible = new URLSearchParams(
-      window.location.search,
-    ).has('scene-debug');
+    const sceneParams = new URLSearchParams(window.location.search);
+    activity.debugRoutes.visible = sceneParams.has('scene-debug');
+    const inspectionTime = sceneParams.get('scene-time');
+    const fixedTime =
+      inspectionTime !== null && Number.isFinite(Number(inspectionTime))
+        ? Math.max(0, Math.min(Number(inspectionTime), activity.duration))
+        : null;
     const boxGeo = new THREE.BoxGeometry(1, 1, 1);
     geometries.push(boxGeo);
     const material = (color: string, metalness = 0.15) => {
@@ -232,7 +247,8 @@ export default function Warehouse(props: Props) {
     let frame = 0;
     let previousFrame = 0;
     let previousRender = 0;
-    let seconds = 0;
+    let seconds = fixedTime ?? 0;
+    activity.update(seconds, 0);
     let previousActivity = 0;
     let applyingCamera = false;
     let lastFocus = live.current.focusedZone;
@@ -273,7 +289,10 @@ export default function Warehouse(props: Props) {
       if (
         !frame &&
         canAnimate() &&
-        (transition || live.current.activityRunning)
+        (transition ||
+          (live.current.activityRunning &&
+            fixedTime === null &&
+            seconds < activity.duration))
       )
         frame = requestAnimationFrame(tick);
     };
@@ -287,7 +306,10 @@ export default function Warehouse(props: Props) {
         ? Math.min((now - previousFrame) / 1000, 0.05)
         : 0;
       previousFrame = now;
-      if (live.current.activityRunning) seconds += delta;
+      if (live.current.activityRunning && fixedTime === null) {
+        seconds = Math.min(seconds + delta, activity.duration);
+        if (seconds === activity.duration) setProductionComplete(true);
+      }
       const cameraMoving = transition !== null;
       if (transition) {
         transition.elapsed += delta;
@@ -319,7 +341,6 @@ export default function Warehouse(props: Props) {
       }
       if (cameraMoving || now - previousRender >= 1000 / 30) {
         activity.update(seconds, seconds - previousActivity);
-        facility.update(seconds);
         previousActivity = seconds;
         previousRender = now;
         render();
@@ -418,6 +439,16 @@ export default function Warehouse(props: Props) {
         lastFocusRevision = live.current.focusRevision;
         aim(lastFocus);
       }
+      wake();
+    };
+    restartProduction.current = () => {
+      seconds = fixedTime ?? 0;
+      previousActivity = seconds;
+      previousFrame = 0;
+      activity.update(seconds, 0);
+      setProductionComplete(false);
+      setMotion('on');
+      render();
       wake();
     };
     let width = 0,
@@ -576,7 +607,18 @@ export default function Warehouse(props: Props) {
           </span>
           <div className="camera-buttons">
             <button
-              onClick={() => setMotion(activityRunning ? 'off' : 'on')}
+              onClick={() => restartProduction.current()}
+              aria-label="Restart production sequence"
+              title="Restart production sequence"
+            >
+              <ListRestart size={16} />
+            </button>
+            <button
+              onClick={() =>
+                productionComplete
+                  ? restartProduction.current()
+                  : setMotion(activityRunning ? 'off' : 'on')
+              }
               aria-pressed={activityRunning}
               aria-label={
                 activityRunning
@@ -620,9 +662,11 @@ export default function Warehouse(props: Props) {
               </button>
             )}
             <span>
-              {props.focusedZone
-                ? 'Drag to orbit · Esc for overview'
-                : 'Drag to orbit · Scroll to zoom · Select a zone'}
+              {productionComplete
+                ? 'Batch packed and chilled · Press play to replay'
+                : props.focusedZone
+                  ? 'Drag to orbit · Esc for overview'
+                  : 'Drag to orbit · Scroll to zoom · Select a zone'}
             </span>
           </div>
         </>

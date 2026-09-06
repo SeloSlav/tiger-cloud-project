@@ -15,7 +15,7 @@ The facility and sensor readings are synthetic. The database schema, hypertable,
 | A1   | Fish store       | Refrigerated cabinets, salmon and tuna trays     |
 | A2   | Vegetable prep   | Stainless benches, cucumber and avocado          |
 | B1   | Fish preparation | Cutting boards and portioned salmon              |
-| B2   | Maki assembly    | Rolling benches and a maki conveyor              |
+| B2   | Maki assembly    | Rolling mats and hand-carried maki trays         |
 | C1   | Nigiri assembly  | Trays of salmon nigiri                           |
 | C2   | Packing line     | Sushi trays, a tray sealer and a packing chiller |
 
@@ -38,7 +38,7 @@ Open the local URL printed by the server (normally http://localhost:3000).
 
 Selecting equipment or a zone button smoothly brings that area into close view. The other floating labels and floor outlines disappear; **Whole factory** restores the overview. Orbit and zoom remain available in either view.
 
-Six procedural operators work at the benches while three runners carry fish, ingredients and sushi trays between stations. Maki rolls and packed trays move along the conveyors. The activity button pauses the factory animation independently of the temperature replay. Reduced-motion preferences start the factory paused and make camera transitions immediate. Animation runs at a capped render rate and suspends while the scene is offscreen or the tab is hidden.
+Six articulated workers handle persistent trays and individual ingredients. Fish moves from refrigerated shelves to preparation, then to maki or nigiri assembly. Vegetable prep supplies the maki station; assembly waits for its ingredients. Workers carry finished trays to packing, fit physical lids at the sealer, and place the sealed batches into the chiller. All worktops are stationary. Finished stock stays in the chiller until **Restart production sequence** is selected; there is no automatic inventory reset. The activity button pauses the factory animation independently of the temperature replay. Reduced-motion preferences start the factory paused and make camera transitions immediate. Animation runs at a capped render rate and suspends while the scene is offscreen or the tab is hidden.
 
 Each zone has a keyboard-accessible selection button. If WebGL is unavailable, the chart, replay, zone controls and metrics remain usable.
 
@@ -150,7 +150,7 @@ This initializes the actual stdio MCP server and verifies that `db_execute_query
 | `lib/facility-scene.ts`            | Shared geometry kit for prep benches, equipment and sushi      |
 | `lib/facility-camera.ts`           | Responsive zone framing and camera transition parameters       |
 | `lib/factory-activity.ts`          | Articulated workers, tray cargo and procedural work poses      |
-| `lib/factory-motion.ts`            | Deterministic delivery routes and pickup/dropoff phases        |
+| `lib/factory-motion.ts`            | Dependency-ordered production plan and object ownership        |
 | `components/temperature-chart.tsx` | SVG temperature history with explicit gaps                     |
 | `lib/telemetry.ts`                 | Deterministic fixture and tested exposure calculation          |
 | `db/001_schema.sql`                | Hypertable, continuous aggregate and Hypercore policy          |
@@ -175,7 +175,7 @@ npm start
 
 Tests cover exposure magnitude/duration, exact thresholds, missing/partial buckets, recovered temperatures, replay cutoffs and deterministic incidents. `npm start` runs the built Worker locally through Wrangler.
 
-Scene checks cover camera framing across aspect ratios, delivery continuity, pickup/dropoff state, equipment clearance and the worker geometry budget. The `?scene-debug=1` URL option displays the authored delivery paths. Motion is deterministic in elapsed seconds and independent of the historical temperature replay.
+Scene checks cover camera framing, production dependencies, exclusive object ownership, continuous handoffs, equipment clearance, persistent ingredient identities, final chilled inventory and the geometry budget. `?scene-debug=1` displays walking routes; add `&scene-time=90` to inspect a reproducible paused moment. Motion is deterministic in elapsed seconds and independent of temperature replay. There is no post-processing pass; the regular rendering is also the no-post baseline.
 
 The frontend uses the Sites Vinext/React starter and can deploy as a Cloudflare Worker. `.openai/hosting.json` is this demo's Sites project binding; create your own Site and replace its project ID when deploying a fork. No database credentials are needed by the deployment.
 
