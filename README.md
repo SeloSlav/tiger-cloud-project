@@ -1,6 +1,6 @@
 # Frostline
 
-![Nori Works Three.js scene showing six sushi production zones and their temperatures](docs/images/nori-works-scene.png)
+![Nori Works Three.js scene showing six sushi production zones and their temperatures](docs/images/nori-works-scene.jpg)
 
 **Sushi production, seen through temperature.**
 
