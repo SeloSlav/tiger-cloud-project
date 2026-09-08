@@ -1,5 +1,11 @@
 # Frostline
 
+<p align="center">
+  <a href="https://seloslav.github.io/tiger-cloud-project/">
+    <img src="public/frostline-logo.png" alt="Frostline — frost, temperature monitoring, and sushi" width="420" />
+  </a>
+</p>
+
 [![Wide view of the Nori Works Three.js factory, with workers carrying sushi trays across six monitored production zones](docs/images/nori-works-scene-wide.png)](docs/images/nori-works-scene-wide.png)
 
 [**Open Frostline**](https://seloslav.github.io/tiger-cloud-project/) · [Live monitoring architecture](docs/live-monitoring.md) · [Database support walkthrough](docs/support-runbook.md) · [Build checks](https://github.com/SeloSlav/tiger-cloud-project/actions)
