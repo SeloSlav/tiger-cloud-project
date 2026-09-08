@@ -1,4 +1,5 @@
 import { ZONES, summarize, type Snapshot, type ZoneId } from './telemetry';
+import { parseIntegrity, type RollupIntegrity } from './rollup-integrity';
 
 export type LiveMonitor = {
   version: 1;
@@ -9,6 +10,8 @@ export type LiveMonitor = {
     { temperature: number | null; sensors: number; lastSeen: string | null }
   >;
   history: Snapshot;
+  // Additive API field: older deployments can still supply the sensor dashboard.
+  integrity?: RollupIntegrity;
   incidents: {
     id: string;
     zoneId: ZoneId;
@@ -92,6 +95,7 @@ export function parseMonitor(value: unknown): LiveMonitor {
     )
       throw new Error('Invalid incident');
   }
+  if (m.integrity !== undefined) parseIntegrity(m.integrity, m.queriedAt);
   return m;
 }
 export function monitorIsStale(m: LiveMonitor | null, now: number) {

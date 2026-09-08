@@ -27,6 +27,7 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { TemperatureChart } from '@/components/temperature-chart';
+import { RollupIntegrityPanel } from '@/components/rollup-integrity';
 import {
   ZONES,
   EVENTS,
@@ -717,6 +718,9 @@ export default function Home() {
           </p>
         )}
       </section>
+      {isLive && (
+        <RollupIntegrityPanel monitor={live} now={now} interrupted={Boolean(liveError)} onSelect={selectZone} />
+      )}
       <footer className="page-footer">
         <span>
           <Snowflake size={14} />

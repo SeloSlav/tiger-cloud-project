@@ -1,3 +1,57 @@
+-- Reconcile one hour of completed zone buckets, leaving ten minutes for the
+-- five-minute refresh lag + schedule. Both sides share the caller's snapshot.
+-- This is intentionally inside raw retention; never refresh expired source data.
+CREATE OR REPLACE FUNCTION frostline_live.rollup_integrity()
+RETURNS jsonb LANGUAGE SQL STABLE
+SET search_path=pg_catalog,public AS $$
+WITH bounds AS (
+  SELECT time_bucket(INTERVAL '5 minutes',now())-INTERVAL '10 minutes' AS finish
+), raw AS (
+  SELECT time_bucket(INTERVAL '5 minutes',r.time) AS bucket,r.zone_id,
+    count(*)::integer AS samples,count(DISTINCT r.sensor_id)::integer AS sensors,
+    round(avg(r.temperature_c)::numeric,2)::double precision AS temperature,
+    max(r.temperature_c) AS peak
+  FROM frostline_live.readings r CROSS JOIN bounds b
+  WHERE r.time>=b.finish-INTERVAL '1 hour' AND r.time<b.finish
+  GROUP BY 1,2
+), rollup AS (
+  SELECT a.* FROM frostline_live.zone_5m a CROSS JOIN bounds b
+  WHERE a.bucket>=b.finish-INTERVAL '1 hour' AND a.bucket<b.finish
+), compared AS (
+  SELECT z.id,t.bucket,coalesce(r.samples,0) AS raw_samples,
+    coalesce(a.samples,0) AS rollup_samples,
+    (coalesce(r.samples,0)<>20 OR coalesce(r.sensors,0)<>4) AS incomplete,
+    (coalesce(r.samples,0)<>coalesce(a.samples,0)
+      OR coalesce(r.sensors,0)<>coalesce(a.sensors,0)
+      OR r.temperature IS DISTINCT FROM a.temperature
+      OR r.peak IS DISTINCT FROM a.peak) AS mismatch
+  FROM bounds b CROSS JOIN LATERAL generate_series(
+    b.finish-INTERVAL '1 hour',b.finish-INTERVAL '5 minutes',INTERVAL '5 minutes'
+  ) t(bucket) CROSS JOIN frostline.zones z
+  LEFT JOIN raw r ON r.bucket=t.bucket AND r.zone_id=z.id
+  LEFT JOIN rollup a ON a.bucket=t.bucket AND a.zone_id=z.id
+), zones AS (
+  SELECT id AS "zoneId",count(*)::integer AS "checkedBuckets",
+    count(*) FILTER (WHERE mismatch)::integer AS "mismatchedBuckets",
+    count(*) FILTER (WHERE incomplete)::integer AS "incompleteRawBuckets",
+    sum(raw_samples)::integer AS "rawSamples",sum(rollup_samples)::integer AS "rollupSamples",
+    min(bucket) FILTER (WHERE mismatch) AS "firstMismatchAt"
+  FROM compared GROUP BY id
+)
+SELECT jsonb_build_object(
+  'windowStart',b.finish-INTERVAL '1 hour','windowEnd',b.finish,'graceMinutes',10,
+  'zones',(SELECT jsonb_agg(z ORDER BY z."zoneId") FROM zones z),
+  'refresh',(
+    SELECT jsonb_build_object('scheduled',j.scheduled,'lastStatus',s.last_run_status,
+      'lastFinishedAt',s.last_successful_finish,'nextStart',CASE WHEN isfinite(s.next_start) THEN s.next_start END)
+    FROM timescaledb_information.jobs j LEFT JOIN timescaledb_information.job_stats s USING(job_id)
+    WHERE j.hypertable_schema='frostline_live' AND j.hypertable_name='zone_5m'
+      AND j.proc_name='policy_refresh_continuous_aggregate' LIMIT 1
+  )
+) FROM bounds b;
+$$;
+REVOKE ALL ON FUNCTION frostline_live.rollup_integrity() FROM PUBLIC;
+
 -- One bounded, parameter-free read API. The application's role receives only
 -- EXECUTE on this function; it cannot write or issue arbitrary table queries.
 CREATE OR REPLACE FUNCTION frostline_live.monitor_snapshot()
@@ -40,6 +94,7 @@ WITH bounds AS (
 )
 SELECT jsonb_build_object(
   'version',1,'queriedAt',now(),'latestReadingAt',(SELECT max(time) FROM latest),
+  'integrity',frostline_live.rollup_integrity(),
   'current',(SELECT jsonb_object_agg(id,state) FROM current_zones),
   'incidents',coalesce((SELECT jsonb_agg(i) FROM incidents i),'[]'::jsonb),
   'collector',(SELECT jsonb_build_object('scheduled',j.scheduled,'lastStatus',s.last_run_status,
