@@ -2,6 +2,7 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import Link from 'next/link';
+import Image from 'next/image';
 import {
   Snowflake,
   ArrowUpRight,
@@ -273,8 +274,16 @@ export default function Home() {
     <main className="app-shell">
       <header className="topbar">
         <Link href="/" className="brand">
-          <Snowflake className="brand-mark" size={27} />
-          frostline<span className="brand-tag">OPERATIONS</span>
+          <Image
+            className="brand-logo"
+            src="./frostline-logo.png"
+            alt="Frostline"
+            width={1983}
+            height={793}
+            unoptimized
+            priority
+          />
+          <span className="brand-tag">OPERATIONS</span>
         </Link>
         <div className="topbar-right">
           <span className="demo-pill">

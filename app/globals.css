@@ -93,8 +93,11 @@ a:focus-visible {
   font-weight: 650;
   letter-spacing: -1px;
 }
-.brand-mark {
-  color: var(--primary);
+.brand-logo {
+  display: block;
+  width: 180px;
+  height: auto;
+  flex-shrink: 0;
 }
 .brand-tag {
   margin-left: 12px;
@@ -667,8 +670,8 @@ h2 {
     font-size: 23px;
     gap: 7px;
   }
-  .brand-mark {
-    width: 22px;
+  .brand-logo {
+    width: clamp(108px, 32vw, 140px);
   }
   .topbar-right {
     gap: 10px;
