@@ -12,9 +12,28 @@ const geistMono = Geist_Mono({
   subsets: ['latin'],
 });
 
+const iconBase =
+  process.env.FROSTLINE_TARGET === 'pages' ? '/tiger-cloud-project' : '';
+
 export const metadata: Metadata = {
   icons: {
-    icon: `${process.env.FROSTLINE_TARGET === 'pages' ? '/tiger-cloud-project' : ''}/favicon.svg`,
+    icon: [
+      {
+        url: `${iconBase}/favicon.ico?v=2`,
+        sizes: '16x16 32x32 48x48',
+        type: 'image/x-icon',
+      },
+      {
+        url: `${iconBase}/favicon-32.png?v=2`,
+        sizes: '32x32',
+        type: 'image/png',
+      },
+      {
+        url: `${iconBase}/favicon.svg?v=2`,
+        sizes: 'any',
+        type: 'image/svg+xml',
+      },
+    ],
   },
   title: 'Frostline — Nori Works, Zagreb',
   description:

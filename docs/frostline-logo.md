@@ -6,6 +6,12 @@ Used in the dashboard header. The relative image URL resolves under both the loc
 
 Created with the built-in image-generation tool. PNG with an alpha channel; transparent background verified from the saved file. Intended for the dark Frostline interface. This is a raster brand asset; an editable vector master is not included.
 
+## Browser favicon
+
+`public/favicon.svg` is a separate, editable small-size emblem using the same icy thermometer, frost branches and salmon sushi themes. Its dark rounded tile keeps the pale strokes legible in light and dark browser tabs. It omits the wordmark and fine detail for small sizes.
+
+The SVG is the scalable browser icon; `public/favicon-32.png` provides a 32-pixel PNG fallback, and `public/favicon.ico` contains 16-, 32- and 48-pixel images. Raster fallbacks are rendered from the SVG. Metadata uses the correct GitHub Pages prefix and a versioned URL to refresh cached icons.
+
 ## Final generation prompt
 
 Create a professional transparent-background PNG logo for frostline.
