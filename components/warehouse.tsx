@@ -37,7 +37,6 @@ export type ZoneState = {
 };
 type Props = {
   zones: ZoneState[];
-  selected: ZoneId;
   focusedZone: ZoneId | null;
   focusRevision: number;
   onOverview: () => void;
@@ -96,7 +95,12 @@ export default function Warehouse(props: Props) {
     camera.lookAt(0, 0, 0);
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.target.set(0, 0, 0);
-    controls.enablePan = false;
+    controls.enablePan = true;
+    controls.mouseButtons = {
+      LEFT: THREE.MOUSE.ROTATE,
+      MIDDLE: THREE.MOUSE.DOLLY,
+      RIGHT: THREE.MOUSE.PAN,
+    };
     controls.enableDamping = false;
     controls.minPolarAngle = 0.25;
     controls.maxPolarAngle = Math.PI * 0.43;
@@ -368,8 +372,8 @@ export default function Warehouse(props: Props) {
           data.debt,
           live.current.metric,
         );
-        const selected = live.current.selected === zone.id;
         const focused = live.current.focusedZone === zone.id;
+        const selected = focused;
         const visible = live.current.focusedZone === null || focused;
         zone.label.visible = visible;
         zone.plate.visible = visible;
@@ -488,15 +492,47 @@ export default function Warehouse(props: Props) {
       }
       render();
     };
-    let downX = 0,
-      downY = 0;
+    let clickStart: { pointerId: number; x: number; y: number } | null = null;
+    const cancelClick = () => {
+      clickStart = null;
+    };
     const down = (e: PointerEvent) => {
-      downX = e.clientX;
-      downY = e.clientY;
+      // Only a single, unmodified primary click can change the selected zone.
+      // Right/middle drags and multi-touch gestures belong to OrbitControls.
+      clickStart =
+        e.isPrimary && e.button === 0 && !e.ctrlKey && !e.metaKey && !e.shiftKey
+          ? { pointerId: e.pointerId, x: e.clientX, y: e.clientY }
+          : null;
+    };
+    const move = (e: PointerEvent) => {
+      if (
+        clickStart?.pointerId === e.pointerId &&
+        Math.hypot(e.clientX - clickStart.x, e.clientY - clickStart.y) > 5
+      )
+        cancelClick();
     };
     const up = (e: PointerEvent) => {
-      if (Math.hypot(e.clientX - downX, e.clientY - downY) > 5) return;
+      const start = clickStart;
+      cancelClick();
+      if (
+        !start ||
+        start.pointerId !== e.pointerId ||
+        e.button !== 0 ||
+        e.ctrlKey ||
+        e.metaKey ||
+        e.shiftKey ||
+        Math.hypot(e.clientX - start.x, e.clientY - start.y) > 5
+      )
+        return;
       const rect = renderer.domElement.getBoundingClientRect();
+      // OrbitControls captures pointers; releasing outside the canvas is no pick.
+      if (
+        e.clientX < rect.left ||
+        e.clientX > rect.right ||
+        e.clientY < rect.top ||
+        e.clientY > rect.bottom
+      )
+        return;
       const ray = new THREE.Raycaster();
       ray.setFromCamera(
         new THREE.Vector2(
@@ -515,7 +551,19 @@ export default function Warehouse(props: Props) {
         if (object?.userData.zone) {
           live.current.onSelect(object.userData.zone);
         }
+      } else {
+        live.current.onOverview();
       }
+    };
+    const outside = (e: PointerEvent) => {
+      if (
+        e.isPrimary &&
+        e.button === 0 &&
+        live.current.focusedZone !== null &&
+        e.target instanceof Node &&
+        !container.closest('.map-panel')?.contains(e.target)
+      )
+        live.current.onOverview();
     };
     const lost = (e: Event) => {
       e.preventDefault();
@@ -524,8 +572,13 @@ export default function Warehouse(props: Props) {
       setFailed(true);
     };
     renderer.domElement.addEventListener('pointerdown', down);
+    renderer.domElement.addEventListener('pointermove', move);
     renderer.domElement.addEventListener('pointerup', up);
+    renderer.domElement.addEventListener('pointercancel', cancelClick);
+    renderer.domElement.addEventListener('lostpointercapture', cancelClick);
     renderer.domElement.addEventListener('webglcontextlost', lost);
+    document.addEventListener('pointerdown', outside);
+    window.addEventListener('blur', cancelClick);
     const suspend = () => {
       cancelAnimationFrame(frame);
       frame = 0;
@@ -565,8 +618,16 @@ export default function Warehouse(props: Props) {
       controls.removeEventListener('start', interruptCamera);
       controls.dispose();
       renderer.domElement.removeEventListener('pointerdown', down);
+      renderer.domElement.removeEventListener('pointermove', move);
       renderer.domElement.removeEventListener('pointerup', up);
+      renderer.domElement.removeEventListener('pointercancel', cancelClick);
+      renderer.domElement.removeEventListener(
+        'lostpointercapture',
+        cancelClick,
+      );
       renderer.domElement.removeEventListener('webglcontextlost', lost);
+      document.removeEventListener('pointerdown', outside);
+      window.removeEventListener('blur', cancelClick);
       geometries.forEach((g) => g.dispose());
       materials.forEach((m) => m.dispose());
       textures.forEach((t) => t.dispose());
@@ -652,8 +713,8 @@ export default function Warehouse(props: Props) {
             )}
             <span>
               {props.focusedZone
-                ? 'Drag to orbit · Esc for overview'
-                : 'Drag to orbit · Scroll to zoom · Select a zone'}
+                ? 'Drag to orbit · Right-drag to pan · Click outside to deselect'
+                : 'Drag to orbit · Right-drag to pan · Scroll to zoom'}
             </span>
           </div>
         </>

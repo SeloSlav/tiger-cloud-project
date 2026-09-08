@@ -42,7 +42,7 @@ For the original guided incident replay, choose **Shift archive**:
 4. Select **C1** and scrub to around **08:25 UTC** to see a deliberate telemetry gap. Missing data is visibly unknown and excluded from exposure calculations.
 5. Export the selected zone's history as CSV, limited to the current replay position.
 
-Selecting equipment or a zone button smoothly brings that area into close view. The other floating labels and floor outlines disappear; **Whole factory** restores the overview. Orbit and zoom remain available in either view.
+Selecting equipment or a zone button smoothly brings that area into close view. The other floating labels and floor outlines disappear; **Whole factory** restores the overview. Left-drag orbits, right-drag pans, and scrolling zooms in either view. Clicking empty space or outside the production-floor panel clears the sector highlight and restores the overview; the chart keeps the last inspected zone. Camera drags do not change the selection.
 
 Fourteen articulated workers handle twelve reusable trays across overlapping batches. Receiving, fish preparation, maki and nigiri assembly, vegetable supply, packing, chilling and dispatch run concurrently. Directional walking lanes and staggered crew schedules keep the aisles moving without a factory-wide lock. Workers pick up real trays, carry them with their gloves on the handles, place them on stationary benches and return for the next batch. Ingredients and lids are separate objects placed during assembly and packing; finished stock leaves through dispatch before its pooled tray is reused off the production floor.
 

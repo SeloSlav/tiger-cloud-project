@@ -421,7 +421,6 @@ export default function Home() {
             <Warehouse
               zones={summaries}
               metric={metric}
-              selected={selected}
               focusedZone={focusedZone}
               focusRevision={focusRevision}
               onOverview={() => setFocusedZone(null)}
@@ -432,7 +431,7 @@ export default function Home() {
             {summaries.map((z) => (
               <button
                 key={z.id}
-                aria-pressed={selected === z.id}
+                aria-pressed={focusedZone === z.id}
                 aria-label={`${z.name}, zone ${z.id}, ${z.temperature === null ? 'no data' : z.temperature.toFixed(1) + ' degrees Celsius'}`}
                 onClick={() => selectZone(z.id)}
               >
