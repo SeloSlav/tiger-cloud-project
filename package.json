@@ -22,6 +22,7 @@
     "db:verify:mcp": "tsx scripts/verify-mcp.ts",
     "db:setup:live": "tsx scripts/setup-live.ts",
     "db:verify:live": "tsx scripts/verify-live.ts",
+    "db:update:monitor": "tsx scripts/update-monitor.ts",
     "db:role:live": "tsx scripts/create-monitor-role.ts",
     "db:seed:mcp": "tsx scripts/seed-mcp.ts",
     "data:sync:mcp": "tsx scripts/export-mcp.ts"

@@ -81,6 +81,8 @@ flowchart LR
 
 The running workflow uses the separate `frostline_live` schema: a sensor registry, timestamp-aligned observations, a real-time continuous aggregate, incident persistence, custom background job, Hypercore columnstore and coordinated retention policies. The API's database role can execute one bounded function and cannot select or insert raw table rows. [Setup, tests, measured storage savings and stopping the collector](docs/live-monitoring.md).
 
+**Rollup integrity** independently compares one hour of raw telemetry with the five-minute continuous aggregate. It checks sample counts, sensor counts, means and peaks across 72 zone buckets, with a ten-minute allowance for scheduled refresh. The dashboard distinguishes incomplete source coverage from aggregate drift and shows refresh-job status. A successful job or matching SQL/client totals alone cannot establish raw-to-rollup consistency: historical corrections to already-materialized buckets still need refresh, even with real-time aggregation enabled. [Design, MCP verification and recovery procedure](docs/rollup-integrity.md).
+
 The original `frostline` schema powers the fixed shift archive:
 
 - **Hypertable:** `frostline.readings`, partitioned daily, with a `(zone_id, time DESC)` index. The primary key includes time, so seed retries are idempotent.
@@ -165,6 +167,8 @@ This initializes the actual stdio MCP server and verifies that `db_execute_query
 | `app/page.tsx`                          | Live/archive state, incidents, zone details, CSV export           |
 | `components/use-live-monitor.ts`        | Live API polling, timeout, visibility and interrupted updates     |
 | `lib/live-monitor.ts`                   | API validation, sensor freshness and SQL exposure parity          |
+| `components/rollup-integrity.tsx`       | Live source comparison, missing coverage and refresh status       |
+| `lib/rollup-integrity.ts`               | Bounded comparison validation and check freshness                 |
 | `api/monitor.ts`, `server/monitor.ts`   | Read-only Vercel endpoint and restricted PostgreSQL connection    |
 | `db/002_live.sql`, `db/003_monitor.sql` | Live ingestion, incidents, storage policies and bounded API query |
 | `components/warehouse.tsx`              | Orthographic Three.js scene, picking, orbit controls, disposal    |
@@ -179,6 +183,7 @@ This initializes the actual stdio MCP server and verifies that `db_execute_query
 | `db/thermal-debt.sql`                   | Independent SQL exposure calculation                              |
 | `db/quality.sql`                        | Reject repeated sensor samples and unexpected identities          |
 | `db/diagnostics.sql`                    | Compare raw data and rollups; inspect jobs and chunks             |
+| `db/integrity-regression.sql`           | Rolled-back historical correction, peak and missingness checks    |
 | `scripts/verify-mcp.ts`                 | Read-only Tiger diagnostics, SQL regression and query plan        |
 | `scripts/seed.ts`                       | Idempotent synthetic ingestion and historical refresh             |
 | `scripts/export.ts`                     | SQL export and parity verification                                |

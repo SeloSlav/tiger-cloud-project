@@ -1197,8 +1197,13 @@ h2 {
   color: #edc17e;
   font-size: 14px;
 }
-.integrity-status.verified { color: var(--primary); }
-.integrity-status.unavailable, .integrity-status.stale { color: #a8babf; }
+.integrity-status.verified {
+  color: var(--primary);
+}
+.integrity-status.unavailable,
+.integrity-status.stale {
+  color: #a8babf;
+}
 .integrity-description {
   color: #a8babf;
   font-size: 16px;
@@ -1206,27 +1211,110 @@ h2 {
   margin: 18px 0;
   max-width: 950px;
 }
-.integrity-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 24px; margin: 24px 0; }
-.integrity-metrics dt { color: #a8babf; font-size: 14px; margin-bottom: 10px; }
-.integrity-metrics dd { font-family: var(--font-geist-mono), monospace; font-size: 26px; margin: 0; }
-.integrity-metrics dd span { color: #90a4ae; font-size: 16px; }
-.integrity-metrics .integrity-window { font-size: 20px; padding-top: 4px; }
-.integrity-details { border-top: 1px solid #293a40; padding-top: 18px; }
-.integrity-details summary { cursor: pointer; color: #d1dddd; font-size: 14px; }
-.integrity-details summary svg { display: inline; vertical-align: middle; margin: 0 8px; }
-.integrity-table-wrap { overflow-x: auto; }
-.integrity-details table { width: 100%; border-collapse: collapse; font-size: 14px; text-align: left; }
-.integrity-details caption { color: #90a4ae; padding: 20px 0 12px; text-align: left; }
-.integrity-details th, .integrity-details td { padding: 12px 10px; border-bottom: 1px solid #293a40; }
-.integrity-details thead th { color: #a8babf; font-weight: 400; }
-.integrity-details th button { text-align: left; color: var(--primary); cursor: pointer; }
-.integrity-details td small { display: block; font-size: 12px; color: #edc17e; margin-top: 4px; }
-.integrity-refresh { color: #a8babf; line-height: 1.6; font-size: 14px; margin: 20px 0; }
-.integrity-refresh strong { color: #d1dddd; font-weight: 500; }
-.integrity-docs { color: var(--primary); font-size: 14px; }
-.integrity-stamp { font-size: 12px; color: #90a4ae; margin: 20px 0 0; }
-@media (max-width: 800px) { .integrity-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 520px) { .integrity-panel { padding: 21px 18px; } .integrity-metrics { gap: 20px 12px; } }
+.integrity-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 24px;
+  margin: 24px 0;
+}
+.integrity-metrics dt {
+  color: #a8babf;
+  font-size: 14px;
+  margin-bottom: 10px;
+}
+.integrity-metrics dd {
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 26px;
+  margin: 0;
+}
+.integrity-metrics dd span {
+  color: #90a4ae;
+  font-size: 16px;
+}
+.integrity-metrics .integrity-window {
+  font-size: 20px;
+  padding-top: 4px;
+}
+.integrity-details {
+  border-top: 1px solid #293a40;
+  padding-top: 18px;
+}
+.integrity-details summary {
+  cursor: pointer;
+  color: #d1dddd;
+  font-size: 14px;
+}
+.integrity-details summary svg {
+  display: inline;
+  vertical-align: middle;
+  margin: 0 8px;
+}
+.integrity-table-wrap {
+  overflow-x: auto;
+}
+.integrity-details table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+  text-align: left;
+}
+.integrity-details caption {
+  color: #90a4ae;
+  padding: 20px 0 12px;
+  text-align: left;
+}
+.integrity-details th,
+.integrity-details td {
+  padding: 12px 10px;
+  border-bottom: 1px solid #293a40;
+}
+.integrity-details thead th {
+  color: #a8babf;
+  font-weight: 400;
+}
+.integrity-details th button {
+  text-align: left;
+  color: var(--primary);
+  cursor: pointer;
+}
+.integrity-details td small {
+  display: block;
+  font-size: 12px;
+  color: #edc17e;
+  margin-top: 4px;
+}
+.integrity-refresh {
+  color: #a8babf;
+  line-height: 1.6;
+  font-size: 14px;
+  margin: 20px 0;
+}
+.integrity-refresh strong {
+  color: #d1dddd;
+  font-weight: 500;
+}
+.integrity-docs {
+  color: var(--primary);
+  font-size: 14px;
+}
+.integrity-stamp {
+  font-size: 12px;
+  color: #90a4ae;
+  margin: 20px 0 0;
+}
+@media (max-width: 800px) {
+  .integrity-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 520px) {
+  .integrity-panel {
+    padding: 21px 18px;
+  }
+  .integrity-metrics {
+    gap: 20px 12px;
+  }
+}
 .footer-links {
   display: flex;
   align-items: center;

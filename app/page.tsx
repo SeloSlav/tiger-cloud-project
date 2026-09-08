@@ -719,7 +719,12 @@ export default function Home() {
         )}
       </section>
       {isLive && (
-        <RollupIntegrityPanel monitor={live} now={now} interrupted={Boolean(liveError)} onSelect={selectZone} />
+        <RollupIntegrityPanel
+          monitor={live}
+          now={now}
+          interrupted={Boolean(liveError)}
+          onSelect={selectZone}
+        />
       )}
       <footer className="page-footer">
         <span>
