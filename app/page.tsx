@@ -17,6 +17,7 @@ import {
   SkipBack,
   Download,
   Info,
+  ChevronDown,
 } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Slider } from '@/components/ui/slider';
@@ -629,9 +630,25 @@ export default function Home() {
                 : 'SHIFT ARCHIVE / 04 SEP 2026'}
             </p>
             <h2>{isLive ? 'The last 24 hours.' : 'A day on the line.'}</h2>
+            <div className="history-zone-control">
+              <label htmlFor="history-zone">View zone</label>
+              <div className="history-zone-select">
+                <select
+                  id="history-zone"
+                  value={selected}
+                  onChange={(event) => selectZone(event.target.value as ZoneId)}
+                >
+                  {ZONES.map((zone) => (
+                    <option key={zone.id} value={zone.id}>
+                      {zone.id} · {zone.name}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown size={16} aria-hidden="true" />
+              </div>
+            </div>
             <p className="replay-description">
-              {current.name} · zone {selected} · mean temperature per 5-minute
-              bucket
+              Mean temperature per 5-minute bucket
             </p>
           </div>
           <div className="replay-actions">

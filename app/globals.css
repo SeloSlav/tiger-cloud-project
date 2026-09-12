@@ -1029,6 +1029,49 @@ h2 {
   color: #8aa0aa;
   margin: 8px 0 0;
 }
+.history-zone-control {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  margin-top: 16px;
+}
+.history-zone-control label {
+  color: #a5b8bf;
+  font-size: 14px;
+}
+.history-zone-select {
+  position: relative;
+  max-width: 100%;
+}
+.history-zone-select select {
+  appearance: none;
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 38px 10px 12px;
+  border: 1px solid #40554d;
+  border-radius: 5px;
+  background: #162720;
+  color: #d7e6da;
+  font: inherit;
+  font-size: 16px;
+  cursor: pointer;
+}
+.history-zone-select select:hover {
+  border-color: #aaca89;
+}
+.history-zone-select select:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 3px;
+}
+.history-zone-select svg {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #c4e990;
+  pointer-events: none;
+}
 .replay-actions {
   display: flex;
   align-items: center;
